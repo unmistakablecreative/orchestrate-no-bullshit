@@ -31,8 +31,8 @@ if [ ! -f "$IDENTITY_FILE" ]; then
   echo "{\"user_id\": \"$USER_ID\", \"installed_at\": \"$TIMESTAMP\"}" > "$IDENTITY_FILE"
   
   # Ledger sync - TEST ENVIRONMENT
-  BIN_ID="TEST_BIN_ID_HERE"
-  API_KEY='TEST_API_KEY_HERE'
+  BIN_ID="68c32532ae596e708feb77d7"
+  API_KEY='$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C'
   
   # DEBUG: Check what's in both directories
   echo "DEBUG: Contents of /app:"
