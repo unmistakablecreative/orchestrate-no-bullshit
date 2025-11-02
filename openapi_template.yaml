@@ -5,7 +5,7 @@ info:
   version: 1.3.2
 
 servers:
-  - url: https://$DOMAIN 
+  - url: http://supposedly-faithful-termite.ngrok-free.app
     description: Dev tunnel for FastAPI (localhost:5001)
 
 paths:

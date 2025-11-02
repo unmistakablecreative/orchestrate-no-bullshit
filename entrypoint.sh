@@ -30,9 +30,9 @@ if [ ! -f "$IDENTITY_FILE" ]; then
   TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   echo "{\"user_id\": \"$USER_ID\", \"installed_at\": \"$TIMESTAMP\"}" > "$IDENTITY_FILE"
   
-  # Ledger sync
-  BIN_ID="68292fcf8561e97a50162139"
-  API_KEY='$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C'
+  # Ledger sync - TEST ENVIRONMENT
+  BIN_ID="TEST_BIN_ID_HERE"
+  API_KEY='TEST_API_KEY_HERE'
   
   # DEBUG: Check what's in both directories
   echo "DEBUG: Contents of /app:"
@@ -118,8 +118,32 @@ echo ""
 echo "📄 Instruction file content:"
 cat "$GPT_FILE"
 
-# Launch tunnel + FastAPI
+# Launch tunnel + FastAPI in background
 ngrok config add-authtoken "$NGROK_TOKEN"
 ngrok http --domain="$NGROK_DOMAIN" 8000 > /dev/null &
 sleep 3
-exec uvicorn jarvis:app --host 0.0.0.0 --port 8000
+
+# Start FastAPI in background
+uvicorn jarvis:app --host 0.0.0.0 --port 8000 &
+FASTAPI_PID=$!
+
+# Wait for FastAPI to be ready
+sleep 2
+
+# Launch terminal wizard for Custom GPT setup
+clear
+echo ""
+echo "🎉 OrchestrateOS is running!"
+echo ""
+echo "Your system is connected at: https://$NGROK_DOMAIN"
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "Now let's set up your Custom GPT..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+sleep 2
+
+# Launch wizard (passing ngrok domain as argument)
+/opt/orchestrate-core-runtime/setup_wizard.sh "$NGROK_DOMAIN"
+
+# Keep FastAPI running
+wait $FASTAPI_PID
