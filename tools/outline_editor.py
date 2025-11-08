@@ -1,5 +1,36 @@
 import json
+import re
 import requests
+import os
+
+
+def resolve_collection_alias(collection_input):
+    """
+    Resolves collection alias to UUID.
+    If input is already a UUID (format: ^[0-9a-f-]{36}$), returns as-is.
+    Otherwise, reads collection_aliases.json and resolves alias to UUID.
+    """
+    # Check if input matches UUID format
+    uuid_pattern = r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+    if re.match(uuid_pattern, str(collection_input)):
+        return collection_input
+
+    # Not a UUID, resolve from aliases file
+    aliases_path = '/Users/srinivas/Orchestrate Github/orchestrate-beta-sandbox/data/collection_aliases.json'
+
+    if not os.path.exists(aliases_path):
+        # If aliases file doesn't exist, return input as-is (fallback)
+        return collection_input
+
+    try:
+        with open(aliases_path, 'r') as f:
+            aliases = json.load(f)
+
+        # Return resolved UUID or original input if not found
+        return aliases.get(collection_input, collection_input)
+    except (json.JSONDecodeError, IOError):
+        # If file read fails, return input as-is
+        return collection_input
 
 
 def create_doc(params):
@@ -17,6 +48,10 @@ def create_doc(params):
         'application/json'}
     if not collectionId:
         collectionId = '6a798b00-6302-42eb-9bbf-b38bef766cd9'
+
+    # Resolve collection alias to UUID
+    collectionId = resolve_collection_alias(collectionId)
+
     payload = {'title': title, 'text': content, 'collectionId':
         collectionId, 'publish': True}
     if parentDocumentId:
@@ -151,7 +186,17 @@ def search_docs(query, limit, offset):
     res = requests.post(f'{api_base}/documents.search', json=payload,
         headers=headers, verify=False)
     res.raise_for_status()
-    return res.json()
+
+    # Simplify return to only include doc ID and title
+    full_response = res.json()
+    if 'data' in full_response:
+        simplified_results = [
+            {'id': doc.get('id'), 'title': doc.get('title')}
+            for doc in full_response.get('data', [])
+        ]
+        return {'status': 'success', 'data': simplified_results}
+
+    return full_response
 
 
 def get_url(doc_id):
@@ -193,8 +238,13 @@ def import_doc_from_file(file_path, collectionId, parentDocumentId,
             '❌ Missing Outline API token in credentials.json'}
     headers = {'Authorization': f'Bearer {token}'}
     files = {'file': open(file_path, 'rb')}
-    data = {'collectionId': collectionId or
-        '6a798b00-6302-42eb-9bbf-b38bef766cd9', 'parentDocumentId': 
+
+    # Resolve collection alias to UUID
+    resolved_collection = resolve_collection_alias(
+        collectionId or '6a798b00-6302-42eb-9bbf-b38bef766cd9'
+    )
+
+    data = {'collectionId': resolved_collection, 'parentDocumentId':
         parentDocumentId or '', 'template': str(template).lower(),
         'publish': str(publish).lower()}
     res = requests.post(f'{api_base}/documents.import', headers=headers,
@@ -212,7 +262,11 @@ def move_doc(doc_id, collectionId, parentDocumentId):
             '❌ Missing Outline API token in credentials.json'}
     headers = {'Authorization': f'Bearer {token}', 'Content-Type':
         'application/json'}
-    payload = {'id': doc_id, 'collectionId': collectionId}
+
+    # Resolve collection alias to UUID
+    resolved_collection = resolve_collection_alias(collectionId)
+
+    payload = {'id': doc_id, 'collectionId': resolved_collection}
     if parentDocumentId:
         payload['parentDocumentId'] = parentDocumentId
     res = requests.post(f'{api_base}/documents.move', json=payload, headers
@@ -235,7 +289,35 @@ def create_collection(name, description, permission, icon, color, sharing):
     res = requests.post(f'{api_base}/collections.create', json=payload,
         headers=headers, verify=False)
     res.raise_for_status()
-    return res.json()
+
+    # After successful API call, save alias mapping
+    response_data = res.json()
+    collection_id = response_data.get('data', {}).get('id')
+
+    if collection_id:
+        aliases_path = '/Users/srinivas/Orchestrate Github/orchestrate-beta-sandbox/data/collection_aliases.json'
+
+        # Read existing aliases (or create empty dict if not exists)
+        try:
+            if os.path.exists(aliases_path):
+                with open(aliases_path, 'r') as f:
+                    aliases = json.load(f)
+            else:
+                aliases = {}
+        except (json.JSONDecodeError, IOError):
+            aliases = {}
+
+        # Add mapping: collection_aliases[name] = collection_id
+        aliases[name] = collection_id
+
+        # Write back to file
+        try:
+            with open(aliases_path, 'w') as f:
+                json.dump(aliases, f, indent=2)
+        except IOError:
+            pass  # Silent fail on write error, still return successful API response
+
+    return response_data
 
 
 def get_collection(collection_id):
