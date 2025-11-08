@@ -179,7 +179,7 @@ def unlock_marketplace_tool(tool_name):
     dest_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
 
     if not os.path.exists(dest_path):
-        github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-core-runtime/main/tools/{tool_name}.py"
+        github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-beta-sandbox/main/tools/{tool_name}.py"
         try:
             response = requests.get(github_url)
             response.raise_for_status()
