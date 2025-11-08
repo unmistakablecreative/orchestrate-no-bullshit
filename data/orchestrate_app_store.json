@@ -23,6 +23,12 @@
       "description": "Generate slide decks automatically from structured text using the Gamma API — no design skills needed.",
       "priority": 4,
       "referral_unlock_cost": 25
+    },
+    "claude_assistant": {
+      "label": "Claude Assistant",
+      "description": "Autonomous task execution - assign tasks to Claude Code, check status, get results while you sleep.",
+      "priority": 5,
+      "referral_unlock_cost": 5
     }
   },
   "display_mode": "table",

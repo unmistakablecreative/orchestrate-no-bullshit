@@ -175,17 +175,18 @@ def unlock_marketplace_tool(tool_name):
     if available_credits < cost:
         return {"status": "locked", "message": f"🚫 You need {cost} credits to unlock '{tool_name}'."}
 
-    # === Step 3: Pull script from GitHub
-    github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-core-runtime/main/tools/{tool_name}.py"
+    # === Step 3: Check if tool exists locally, otherwise pull from GitHub
     dest_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
 
-    try:
-        response = requests.get(github_url)
-        response.raise_for_status()
-        with open(dest_path, "w") as f:
-            f.write(response.text)
-    except Exception as e:
-        return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
+    if not os.path.exists(dest_path):
+        github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-core-runtime/main/tools/{tool_name}.py"
+        try:
+            response = requests.get(github_url)
+            response.raise_for_status()
+            with open(dest_path, "w") as f:
+                f.write(response.text)
+        except Exception as e:
+            return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
 
     # === Step 4: Install dependencies
     def infer_dependencies(path):
