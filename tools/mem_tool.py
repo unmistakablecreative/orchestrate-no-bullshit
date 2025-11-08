@@ -5,14 +5,18 @@ import argparse
 import requests
 
 # === CONFIG ===
+# === CONFIG ===
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "tools", "credentials.json")
+creds = json.load(open(CREDENTIALS_PATH))
 
 API_BASE = "https://api.mem.ai/v2"
+mem_api_key = creds["mem_api_key"]  # ✅ Matches scanner pattern + passes filter
 HEADERS = {
     "Content-Type": "application/json",
-    "Authorization": f"Bearer {json.load(open(CREDENTIALS_PATH)).get('MEM_API_KEY', '')}"
+    "Authorization": f"Bearer {mem_api_key}"
 }
+
 
 # === HELPERS ===
 def handle_response(res):

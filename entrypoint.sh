@@ -30,8 +30,8 @@ if [ ! -f "$IDENTITY_FILE" ]; then
   TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
   echo "{\"user_id\": \"$USER_ID\", \"installed_at\": \"$TIMESTAMP\"}" > "$IDENTITY_FILE"
   
-  # Ledger sync - TEST ENVIRONMENT
-  BIN_ID="68c32532ae596e708feb77d7"
+  # Ledger sync
+  BIN_ID="68292fcf8561e97a50162139"
   API_KEY='$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C'
   
   # DEBUG: Check what's in both directories
@@ -118,32 +118,15 @@ echo ""
 echo "📄 Instruction file content:"
 cat "$GPT_FILE"
 
-# Launch tunnel + FastAPI in background
+# Copy queue watcher to host directory
+if [ -f "claude_queue_watcher.py" ]; then
+  cp claude_queue_watcher.py /orchestrate_user/claude_queue_watcher.py
+  chmod +x /orchestrate_user/claude_queue_watcher.py
+  echo "✅ Queue watcher installed"
+fi
+
+# Launch tunnel + FastAPI
 ngrok config add-authtoken "$NGROK_TOKEN"
 ngrok http --domain="$NGROK_DOMAIN" 8000 > /dev/null &
 sleep 3
-
-# Start FastAPI in background
-uvicorn jarvis:app --host 0.0.0.0 --port 8000 &
-FASTAPI_PID=$!
-
-# Wait for FastAPI to be ready
-sleep 2
-
-# Launch terminal wizard for Custom GPT setup
-clear
-echo ""
-echo "🎉 OrchestrateOS is running!"
-echo ""
-echo "Your system is connected at: https://$NGROK_DOMAIN"
-echo ""
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "Now let's set up your Custom GPT..."
-echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-sleep 2
-
-# Launch wizard (passing ngrok domain as argument)
-/opt/orchestrate-core-runtime/setup_wizard.sh "$NGROK_DOMAIN"
-
-# Keep FastAPI running
-wait $FASTAPI_PID
+exec uvicorn jarvis:app --host 0.0.0.0 --port 8000

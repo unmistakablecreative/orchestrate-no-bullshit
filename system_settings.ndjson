@@ -77,3 +77,4 @@
 {"tool": "file_ops_tool", "action": "move_file", "script_path": "tools/file_ops_tool.py", "params": ["key", "filename", "destination_dir"], "example": {"tool_name": "file_ops_tool", "action": "move_file", "params": {"key": "move_file", "filename": "example.txt", "destination_dir": "/orchestrate_user/archive"}}}
 {"tool": "check_credits", "action": "check_credits", "script_path": "tools/check_credits.py", "params": []}
 {"tool": "refer_user", "action": "refer_user", "script_path": "tools/refer_user.py", "params": ["name", "email"], "example": {"tool_name": "refer_user", "action": "refer_user", "params": {"name": "Melissa Lima", "email": "melissa@example.com"}}}
+{"tool": "claude_assistant", "action": "__tool__", "script_path": "tools/claude_assistant.py", "locked": true, "referral_unlock_cost": 5, "description": "Autonomous task execution - assign tasks to Claude Code, check status, get results while you sleep."}
