@@ -82,13 +82,9 @@ def set_credential(params):
         }
 
     # === Inject into credentials.json ===
+    # Always use credentials.json in the same directory as the script
     creds_path = os.path.join(os.path.dirname(script_path), "credentials.json")
-    if not os.path.exists(creds_path):
-        # Try the tools directory as fallback
-        creds_path = "tools/credentials.json"
-        if not os.path.exists(creds_path):
-            creds_path = "credentials.json"
-    
+
     creds = {}
     if os.path.exists(creds_path):
         try:
@@ -96,6 +92,7 @@ def set_credential(params):
                 creds = json.load(f)
         except:
             creds = {}
+    # If file doesn't exist, it will be created when we write below
 
     # Set all found keys to the same value
     for key in expected_keys:
