@@ -622,12 +622,30 @@ def install_tool(params):
                 text=True
             )
             if test_result.returncode != 0:
-                # Not authenticated - launch auth flow
-                print("🔐 Claude Code not authenticated. Launching auth flow...")
-                subprocess.run(["claude", "/login"], check=False)
-                print("✅ Please complete authentication in the browser.")
+                # Not authenticated - show instructions
+                print("")
+                print("=" * 70)
+                print("🔐 CLAUDE CODE AUTHENTICATION REQUIRED")
+                print("=" * 70)
+                print("")
+                print("Autonomous execution needs Claude Code authentication (one-time setup).")
+                print("")
+                print("📋 STEPS:")
+                print("  1. Open Terminal.app (Command+Space, type 'Terminal')")
+                print("  2. Run: claude")
+                print("  3. Type: /login")
+                print("  4. Complete authentication in browser")
+                print("")
+                print("That's it! After this one-time setup, autonomous execution works forever.")
+                print("")
+                print("=" * 70)
+                print("")
         except FileNotFoundError:
-            print("⚠️ Claude Code not installed. Install from: https://claude.com/claude-code")
+            print("")
+            print("⚠️  Claude Code not installed.")
+            print("The installer should have installed it via Homebrew.")
+            print("If you see this, the installation may have failed.")
+            print("")
         except Exception as e:
             print(f"⚠️ Auth check failed: {e}")
 
