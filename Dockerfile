@@ -23,6 +23,9 @@ RUN pip install --no-cache-dir \
     astor oauthlib requests-oauthlib pdfplumber python-docx \
     pandas lxml
 
+# Install Claude Code CLI
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
 # Create working dir
 RUN mkdir -p /opt/orchestrate-core-runtime
 WORKDIR /opt/orchestrate-core-runtime

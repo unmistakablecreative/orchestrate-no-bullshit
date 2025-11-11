@@ -423,6 +423,23 @@ def unlock_marketplace_tool(tool_name):
         if auth_result.get("status") == "error":
             return auth_result
 
+        # Apply Orchestrate Claude Code configuration (facelift)
+        try:
+            facelift_script = "/opt/orchestrate-core-runtime/apply_claude_facelift.sh"
+            facelift_result = subprocess.run(
+                ["bash", facelift_script],
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+
+            if facelift_result.returncode == 0:
+                print("✅ Claude Code configured for Orchestrate", file=sys.stderr)
+            else:
+                print(f"⚠️ Facelift warning: {facelift_result.stderr}", file=sys.stderr)
+        except Exception as e:
+            print(f"⚠️ Could not apply Claude facelift: {e}", file=sys.stderr)
+
         return {
             "status": "success",
             "message": f"✅ '{tool_name}' unlocked!\n\n{auth_result.get('message', '')}",
