@@ -150,26 +150,14 @@ def assign_task(params):
     # Save queue (handle read-only protected file)
     safe_write_queue(queue_file, queue)
 
-    # Auto-execute if not inside Claude Code
-    auto_execute = params.get("auto_execute", True)  # Default to auto-execute
-
-    if auto_execute and not os.environ.get("CLAUDECODE"):
-        # Spawn Claude session to process this task immediately
-        execute_result = execute_queue({})
-        return {
-            "status": "success",
-            "message": f"✅ Task '{task_id}' assigned and execution started",
-            "task_id": task_id,
-            "batch_id": batch_id,
-            "execution": execute_result
-        }
-
+    # In-container mode: Queue processor handles execution
+    # Just return success - queue processor will pick it up
     return {
         "status": "success",
         "message": f"✅ Task '{task_id}' assigned to Claude Code queue",
         "task_id": task_id,
         "batch_id": batch_id,
-        "next_step": "Call execute_queue to trigger processing" if not auto_execute else "Task will be processed in current session"
+        "next_step": "Queue processor will execute this task automatically"
     }
 
 

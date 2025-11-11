@@ -210,12 +210,21 @@ class ClaudeQueueProcessor:
         log("")
 
         # Initial check for existing tasks
-        self._check_for_new_tasks()
+        try:
+            self._check_for_new_tasks()
+        except Exception as e:
+            log(f"❌ Error in initial check: {e}")
 
         # Poll loop
         while self.running:
-            time.sleep(self.poll_interval)
-            self._check_for_new_tasks()
+            try:
+                time.sleep(self.poll_interval)
+                log("🔍 Polling for new tasks...")
+                self._check_for_new_tasks()
+            except Exception as e:
+                log(f"❌ Error in poll loop: {e}")
+                import traceback
+                log(f"Traceback: {traceback.format_exc()}")
 
     def stop(self):
         """Stop the queue processor"""
