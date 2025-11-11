@@ -27,5 +27,8 @@ RUN pip install --no-cache-dir \
 RUN mkdir -p /opt/orchestrate-core-runtime
 WORKDIR /opt/orchestrate-core-runtime
 
+# Copy all files from repo into container
+COPY . /opt/orchestrate-core-runtime/
+
 # Entry handled externally
 ENTRYPOINT ["/bin/bash", "/opt/orchestrate-core-runtime/entrypoint.sh"]

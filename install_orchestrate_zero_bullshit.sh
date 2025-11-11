@@ -5,14 +5,15 @@ echo "╔═══════════════════════�
 echo "║     ORCHESTRATE - ZERO BULLSHIT INSTALLER                     ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
-echo "This script does everything the DMG installer does, without the DMG."
-echo ""
+
+# === Hardcoded credentials for testing ===
+NGROK_TOKEN="2up3BdDUd9Var3zdSB0ym2gJv0C_5PRgyUMNUTMR2ksN6VXXV"
+NGROK_DOMAIN="supposedly-faithful-termite.ngrok-free.app"
 
 # === Step 1: Check Docker ===
 echo "🐳 Checking Docker..."
 if ! command -v docker &> /dev/null; then
     echo "❌ Docker not found! Please install Docker Desktop first."
-    echo "   Download: https://www.docker.com/products/docker-desktop"
     exit 1
 fi
 
@@ -24,34 +25,23 @@ fi
 echo "✅ Docker ready"
 echo ""
 
-# === Step 2: Get ngrok credentials ===
-echo "🔐 ngrok Configuration"
-echo ""
-read -p "Enter your ngrok authtoken: " NGROK_TOKEN
-read -p "Enter your ngrok domain (e.g. clever-bear.ngrok-free.app): " NGROK_DOMAIN
-echo ""
-
-# === Step 3: Setup directories ===
+# === Step 2: Setup directories ===
 echo "📁 Setting up directories..."
 ORCHESTRATE_DIR="$HOME/Documents/Orchestrate"
 mkdir -p "$ORCHESTRATE_DIR"
 echo "✅ Created $ORCHESTRATE_DIR"
 echo ""
 
-# === Step 4: Clone/pull repo ===
-echo "📦 Fetching orchestrate-no-bullshit..."
-REPO_DIR="$ORCHESTRATE_DIR/orchestrate-no-bullshit"
+# === Step 3: Use local repo ===
+echo "📦 Using local orchestrate-no-bullshit repo..."
+REPO_DIR="/Users/srinivas/Orchestrate Github/orchestrate-no-bullshit"
 
-if [ -d "$REPO_DIR" ]; then
-    echo "🔄 Repo exists, pulling latest..."
-    cd "$REPO_DIR"
-    git pull
-else
-    echo "📥 Cloning repo..."
-    git clone https://github.com/unmistakablecreative/orchestrate-no-bullshit.git "$REPO_DIR"
-    cd "$REPO_DIR"
+if [ ! -d "$REPO_DIR" ]; then
+    echo "❌ Local repo not found at $REPO_DIR"
+    exit 1
 fi
 
+cd "$REPO_DIR"
 echo "✅ Repo ready at $REPO_DIR"
 echo ""
 
