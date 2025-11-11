@@ -130,57 +130,123 @@ def unlock_tool(tool_name):
 
 def trigger_claude_auth():
     """
-    Trigger Claude Code authentication flow.
-    Opens browser for one-time subscription authentication.
+    Install Claude Code (if needed) and trigger authentication flow.
+    Returns auth URL for user to complete in browser.
     """
     import subprocess
-    import platform
+    import os
+    import time
 
-    auth_url = "https://claude.ai/"
+    # Check if Claude Code is installed
+    claude_path = os.path.expanduser("~/.local/bin/claude")
 
-    message = """
+    if not os.path.exists(claude_path):
+        print("📦 Installing Claude Code in container...", file=sys.stderr)
+
+        # Install Claude Code
+        try:
+            install_result = subprocess.run(
+                ["bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"],
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+
+            if install_result.returncode != 0:
+                return {
+                    "status": "error",
+                    "message": f"❌ Failed to install Claude Code: {install_result.stderr}"
+                }
+
+            print("✅ Claude Code installed successfully", file=sys.stderr)
+
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"❌ Installation error: {str(e)}"
+            }
+
+    # Run claude /login to get auth URL
+    print("🔐 Starting authentication flow...", file=sys.stderr)
+
+    try:
+        # Set PATH to include ~/.local/bin
+        env = os.environ.copy()
+        env["PATH"] = f"{os.path.expanduser('~/.local/bin')}:{env.get('PATH', '')}"
+
+        # Run claude /login (non-interactive, gets URL)
+        auth_process = subprocess.Popen(
+            [claude_path, "/login"],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env
+        )
+
+        # Give it a moment to output the URL
+        time.sleep(2)
+
+        # Try to read output
+        stdout, stderr = auth_process.communicate(timeout=10)
+        combined_output = stdout + stderr
+
+        # Extract URL from output (claude outputs login URL)
+        auth_url = None
+        for line in combined_output.split('\n'):
+            if 'http' in line and 'claude.ai' in line:
+                # Extract URL from line
+                import re
+                url_match = re.search(r'https?://[^\s]+', line)
+                if url_match:
+                    auth_url = url_match.group(0)
+                    break
+
+        if not auth_url:
+            auth_url = "https://claude.ai/login"
+
+        message = f"""
 ╔════════════════════════════════════════════════════════════════╗
 ║        CLAUDE ASSISTANT - AUTHENTICATION REQUIRED             ║
 ╚════════════════════════════════════════════════════════════════╝
 
-🎉 claude_assistant is now unlocked!
+✅ Claude Code installed in container
+🔐 Authentication URL generated
 
-To activate autonomous execution, you need to authenticate Claude Code
-with your Anthropic subscription. This is a ONE-TIME setup.
+📋 NEXT STEPS:
+  1. Open this URL in your browser: {auth_url}
+  2. Sign in with your Claude Pro/Team account
+  3. Authorize the connection
+  4. Done!
+
+After authentication:
+  • Assign tasks via claude_assistant
+  • Claude executes autonomously inside container
+  • Uses your existing Claude subscription (no extra API costs)
 
 Requirements:
   ✅ Active Claude Pro or Team subscription
-  ✅ Browser for authentication
 
-Setup Steps:
-  1. Open Terminal
-  2. Run: claude
-  3. Type: /login
-  4. Complete authentication in browser
-  5. Done!
-
-After authentication:
-  - Assign tasks via Custom GPT
-  - Claude executes autonomously
-  - No additional API costs
-
-Cost: Uses your existing Claude subscription
-
-Opening authentication page in your browser...
+Authentication URL: {auth_url}
 """
 
-    # Open browser to Claude website
-    try:
-        if platform.system() == "Darwin":  # macOS
-            subprocess.run(["open", auth_url], check=True)
-        elif platform.system() == "Windows":
-            subprocess.run(["start", auth_url], shell=True, check=True)
-        else:  # Linux
-            subprocess.run(["xdg-open", auth_url], check=True)
-    except:
-        pass  # Silently fail if browser open fails
+        return {
+            "status": "success",
+            "message": message,
+            "auth_url": auth_url,
+            "setup_required": True
+        }
 
-    return message
+    except subprocess.TimeoutExpired:
+        return {
+            "status": "error",
+            "message": "❌ Authentication timed out. Try running: claude /login manually"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"❌ Authentication failed: {str(e)}"
+        }
 
 
 def unlock_marketplace_tool(tool_name):
@@ -350,17 +416,22 @@ def unlock_marketplace_tool(tool_name):
 
     # === Special handling for claude_assistant ===
     if tool_name == "claude_assistant":
-        # Trigger Claude Code authentication setup
-        auth_message = trigger_claude_auth()
+        # Trigger Claude Code installation and authentication setup
+        auth_result = trigger_claude_auth()
+
+        # If installation/auth failed, return error
+        if auth_result.get("status") == "error":
+            return auth_result
 
         return {
             "status": "success",
-            "message": f"✅ '{tool_name}' unlocked!\n\n{auth_message}",
+            "message": f"✅ '{tool_name}' unlocked!\n\n{auth_result.get('message', '')}",
             "actions": [a["action"] for a in actions],
             "dependencies": dep_result.get("message"),
             "credentials": credential_warnings.get(tool_name, "—"),
             "setup_required": True,
-            "setup_instructions": auth_message
+            "auth_url": auth_result.get("auth_url"),
+            "setup_instructions": auth_result.get("message")
         }
 
     # === Final response

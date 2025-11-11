@@ -142,6 +142,15 @@ def startup_routines():
     except Exception as e:
         logging.warning(f"⚠️ Ngrok relaunch failed: {e}")
 
+    # === Start Claude Queue Processor ===
+    try:
+        from claude_queue_processor import ClaudeQueueProcessor
+        processor = ClaudeQueueProcessor()
+        processor.start_background()
+        logging.info("✅ Claude Code queue processor started")
+    except Exception as e:
+        logging.warning(f"⚠️ Claude queue processor failed to start: {e}")
+
 # === Start Referral Engine subprocess ===
 try:
     referral_script = os.path.join(BASE_DIR, "tools", "referral_engine.py")

@@ -1,5 +1,8 @@
 #!/bin/bash
+# Add Claude Code to PATH (installed to ~/.local/bin)
+export PATH="$HOME/.local/bin:$PATH"
 export PYTHONPATH="$PYTHONPATH:/opt/orchestrate-core-runtime"
+
 USER_DIR="/orchestrate_user"
 STATE_DIR="/container_state"
 OUTPUT_DIR="/app"
@@ -9,10 +12,6 @@ mkdir -p "$USER_DIR/vault/watch_books"
 mkdir -p "$USER_DIR/vault/watch_transcripts"
 mkdir -p "$USER_DIR/orchestrate_exports/markdown"
 mkdir -p "$STATE_DIR"
-
-# Create Claude Code queue files for autonomous execution
-echo '{"tasks": {}}' > "$USER_DIR/claude_task_queue.json"
-echo '{"results": {}}' > "$USER_DIR/claude_task_results.json"
 
 # Prompt if not passed in
 if [ -z "$NGROK_TOKEN" ]; then
