@@ -126,7 +126,7 @@ def assign_task(params):
             except Exception as e:
                 print(f"Warning: Could not load tool_build_protocol.md: {e}", file=sys.stderr)
 
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
     os.makedirs(os.path.dirname(queue_file), exist_ok=True)
 
     # Load queue
@@ -227,7 +227,7 @@ def check_task_status(params):
         return {"status": "error", "message": "❌ Missing required field: task_id"}
 
     # Check queue
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
     if os.path.exists(queue_file):
         with open(queue_file, 'r', encoding='utf-8') as f:
             queue = json.load(f)
@@ -242,7 +242,7 @@ def check_task_status(params):
                 }
 
     # Check results
-    results_file = "/orchestrate_user/claude_task_results.json"
+    results_file = "data/claude_task_results.json"
     if os.path.exists(results_file):
         try:
             with open(results_file, 'r', encoding='utf-8') as f:
@@ -280,7 +280,7 @@ def get_task_result(params):
     if not task_id:
         return {"status": "error", "message": "❌ Missing required field: task_id"}
 
-    results_file = "/orchestrate_user/claude_task_results.json"
+    results_file = "data/claude_task_results.json"
 
     if not os.path.exists(results_file):
         return {
@@ -315,7 +315,7 @@ def get_all_results(params):
 
     No parameters needed.
     """
-    results_file = "/orchestrate_user/claude_task_results.json"
+    results_file = "data/claude_task_results.json"
 
     if not os.path.exists(results_file):
         return {
@@ -384,7 +384,7 @@ def cancel_task(params):
     if not task_id:
         return {"status": "error", "message": "❌ Missing required field: task_id"}
 
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
 
     if not os.path.exists(queue_file):
         return {"status": "error", "message": "❌ No task queue found"}
@@ -448,7 +448,7 @@ def update_task(params):
     if not any([new_description, new_priority, new_context]):
         return {"status": "error", "message": "❌ Must provide at least one field to update (description, priority, or context)"}
 
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
 
     if not os.path.exists(queue_file):
         return {"status": "error", "message": "❌ No task queue found"}
@@ -513,7 +513,7 @@ def process_queue(params):
 
     OPTIMIZATION: Only returns queued tasks. Completed tasks are invisible.
     """
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
 
     if not os.path.exists(queue_file):
         return {
@@ -588,7 +588,7 @@ def mark_task_in_progress(params):
     if not task_id:
         return {"status": "error", "message": "❌ Missing required field: task_id"}
 
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
 
     if not os.path.exists(queue_file):
         return {"status": "error", "message": "❌ No task queue found"}
@@ -652,7 +652,7 @@ def execute_queue(params):
         return {
             "status": "error",
             "message": "❌ Cannot spawn nested Claude Code session. You're already inside Claude Code. Process tasks directly in the current session instead.",
-            "hint": "Read tasks from /orchestrate_user/claude_task_queue.json and process them here"
+            "hint": "Read tasks from data/claude_task_queue.json and process them here"
         }
 
     # LOCKFILE CHECK: Prevent multiple simultaneous execute_queue sessions
@@ -729,7 +729,7 @@ def execute_queue(params):
         env.pop('CLAUDECODE', None)
 
         # Minimal prompt - Claude Code auto-loads .claude/CLAUDE.md
-        prompt = """Process all tasks in /orchestrate_user/claude_task_queue.json.
+        prompt = """Process all tasks in data/claude_task_queue.json.
 
 ═══════════════════════════════════════════════════════════
 🚨 CRITICAL: LOGGING IS NOT OPTIONAL 🚨
@@ -846,7 +846,7 @@ def log_task_completion(params):
     task_description = None
     task_batch_id = None
     task_started_at = None
-    queue_file = "/orchestrate_user/claude_task_queue.json"
+    queue_file = "data/claude_task_queue.json"
     if os.path.exists(queue_file):
         try:
             with open(queue_file, 'r', encoding='utf-8') as f:
@@ -881,7 +881,7 @@ def log_task_completion(params):
             print(f"Warning: Could not calculate execution time: {e}", file=sys.stderr)
 
     # Write result
-    results_file = "/orchestrate_user/claude_task_results.json"
+    results_file = "data/claude_task_results.json"
     archive_dir = os.path.join(os.getcwd(), "data/task_archive")
 
     # Load existing results
@@ -1239,7 +1239,7 @@ def get_task_results(params):
     output_format = params.get("format", "json")
     limit = params.get("limit", 10)
 
-    results_file = "/orchestrate_user/claude_task_results.json"
+    results_file = "data/claude_task_results.json"
 
     if not os.path.exists(results_file):
         if output_format == "table":
@@ -1378,7 +1378,7 @@ def get_recent_tasks(params):
     """
     limit = params.get("limit", 10)
 
-    results_file = "/orchestrate_user/claude_task_results.json"
+    results_file = "data/claude_task_results.json"
 
     if not os.path.exists(results_file):
         return {
