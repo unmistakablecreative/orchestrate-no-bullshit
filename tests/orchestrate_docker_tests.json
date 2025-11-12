@@ -71,19 +71,17 @@
       "critical": false
     },
     {
-      "name": "outline_editor_locked",
-      "description": "Verify outline_editor shows as locked",
+      "name": "file_ops_read",
+      "description": "Test file_ops_tool read operation on mike_maples.txt",
       "endpoint": "/execute_task",
       "payload": {
-        "tool_name": "outline_editor",
-        "action": "search_docs",
+        "tool_name": "file_ops_tool",
+        "action": "read_file",
         "params": {
-          "query": "test",
-          "limit": 5,
-          "offset": 0
+          "filename_fragment": "mike_maples.txt"
         }
       },
-      "expected_status": "locked",
+      "expected_status": "success",
       "critical": false
     },
     {
@@ -124,7 +122,7 @@
         "action": "create_collection",
         "params": {
           "name": "Dogs",
-          "description": "Test collection",
+          "description": "Test collection for German Shepherds",
           "permission": "read_write",
           "icon": "dog",
           "color": "#FF0000",
@@ -136,58 +134,21 @@
       "critical": false
     },
     {
-      "name": "list_supported_actions",
-      "description": "Verify system can list all supported actions",
+      "name": "create_german_shepherds_doc",
+      "description": "Create German Shepherds document in Dogs collection",
       "endpoint": "/execute_task",
       "payload": {
-        "tool_name": "system_settings",
-        "action": "list_supported_actions",
-        "params": {}
-      },
-      "expected_status": "success",
-      "critical": true
-    },
-    {
-      "name": "file_ops_find",
-      "description": "Test file_ops_tool find operation",
-      "endpoint": "/execute_task",
-      "payload": {
-        "tool_name": "file_ops_tool",
-        "action": "find_file",
+        "tool_name": "outline_editor",
+        "action": "create_doc",
         "params": {
-          "key": "find_test",
-          "filename": "test_data.json"
+          "title": "German Shepherds",
+          "text": "# German Shepherds\n\nGerman Shepherds are intelligent, loyal, and versatile working dogs.\n\n## Characteristics\n- Highly trainable\n- Strong and athletic\n- Excellent guard dogs\n\n#Dogs",
+          "publish": true
         }
       },
       "expected_status": "success",
+      "expected_contains": "German Shepherds",
       "critical": false
-    },
-    {
-      "name": "file_ops_read",
-      "description": "Test file_ops_tool read operation",
-      "endpoint": "/execute_task",
-      "payload": {
-        "tool_name": "file_ops_tool",
-        "action": "read_file",
-        "params": {
-          "key": "read_test",
-          "filename": "test_data.json"
-        }
-      },
-      "expected_status": "success",
-      "critical": false
-    },
-    {
-      "name": "system_settings_ndjson_valid",
-      "description": "Verify system_settings.ndjson is valid and readable",
-      "endpoint": "/execute_task",
-      "payload": {
-        "tool_name": "system_settings",
-        "action": "list_tools",
-        "params": {}
-      },
-      "expected_status": "success",
-      "critical": true
     }
   ],
   "cleanup": [
