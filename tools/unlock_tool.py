@@ -117,6 +117,20 @@ def unlock_tool(tool_name):
                 "message": message
             }
 
+    #Tool not in system_settings - check if it's an app store tool
+    import json
+    import os
+
+    APP_STORE_PATH = "/opt/orchestrate-core-runtime/data/orchestrate_app_store.json"
+
+    if os.path.exists(APP_STORE_PATH):
+        with open(APP_STORE_PATH, "r") as f:
+            store_data = json.load(f)
+
+        if tool_name in store_data.get("entries", {}):
+            # Route to unlock_marketplace_tool
+            return unlock_marketplace_tool(tool_name)
+
     save_unlock_status({
         "unlock_credits": available_credits,
         "tools_unlocked": user.get("tools_unlocked", [])
@@ -124,7 +138,7 @@ def unlock_tool(tool_name):
 
     return {
         "status": "error",
-        "message": f"❌ Tool '{tool_name}' not found."
+        "message": f"❌ Tool '{tool_name}' not found in system settings or app store."
     }
 
 
@@ -296,18 +310,17 @@ def unlock_marketplace_tool(tool_name):
     if available_credits < cost:
         return {"status": "locked", "message": f"🚫 You need {cost} credits to unlock '{tool_name}'."}
 
-    # === Step 3: Check if tool exists locally, otherwise pull from GitHub
+    # === Step 3: Pull script from GitHub (downloads even if exists locally)
+    github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-no-bullshit/main/tools/{tool_name}.py"
     dest_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
 
-    if not os.path.exists(dest_path):
-        github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-beta-sandbox/main/tools/{tool_name}.py"
-        try:
-            response = requests.get(github_url)
-            response.raise_for_status()
-            with open(dest_path, "w") as f:
-                f.write(response.text)
-        except Exception as e:
-            return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
+    try:
+        response = requests.get(github_url)
+        response.raise_for_status()
+        with open(dest_path, "w") as f:
+            f.write(response.text)
+    except Exception as e:
+        return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
 
     # === Step 4: Install dependencies
     def infer_dependencies(path):
