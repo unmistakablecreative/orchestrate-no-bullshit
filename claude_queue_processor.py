@@ -97,11 +97,11 @@ class ClaudeQueueProcessor:
                 self._update_task_status(task_id, 'error', error='Claude Code not installed')
                 return
 
-            # Build command
+            # Build command (no --dangerously-skip-permissions because we run as root)
             cmd = [
                 claude_path,
                 '-p',
-                '--dangerously-skip-permissions',
+                '--model', 'haiku',
                 description
             ]
 
@@ -109,9 +109,10 @@ class ClaudeQueueProcessor:
             env = os.environ.copy()
             env["PATH"] = f"{os.path.expanduser('~/.local/bin')}:{env.get('PATH', '')}"
 
-            # Run in background
+            # Run in background with stdin closed
             process = subprocess.Popen(
                 cmd,
+                stdin=subprocess.DEVNULL,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
