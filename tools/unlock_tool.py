@@ -144,12 +144,11 @@ def unlock_tool(tool_name):
 
 def trigger_claude_auth():
     """
-    Install Claude Code (if needed) and trigger authentication flow.
-    Returns auth URL for user to complete in browser.
+    Trigger the host-side authentication setup script.
+    Writes a trigger file that the host can detect and execute.
     """
     import subprocess
     import os
-    import time
 
     # Check if Claude Code is installed
     claude_path = os.path.expanduser("~/.local/bin/claude")
@@ -180,58 +179,23 @@ def trigger_claude_auth():
                 "message": f"❌ Installation error: {str(e)}"
             }
 
-    # Run claude /login to get auth URL
-    print("🔐 Starting authentication flow...", file=sys.stderr)
-
-    try:
-        # Set PATH to include ~/.local/bin
-        env = os.environ.copy()
-        env["PATH"] = f"{os.path.expanduser('~/.local/bin')}:{env.get('PATH', '')}"
-
-        # Run claude /login (non-interactive, gets URL)
-        auth_process = subprocess.Popen(
-            [claude_path, "/login"],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            env=env
-        )
-
-        # Give it a moment to output the URL
-        time.sleep(2)
-
-        # Try to read output
-        stdout, stderr = auth_process.communicate(timeout=10)
-        combined_output = stdout + stderr
-
-        # Extract URL from output (claude outputs login URL)
-        auth_url = None
-        for line in combined_output.split('\n'):
-            if 'http' in line and 'claude.ai' in line:
-                # Extract URL from line
-                import re
-                url_match = re.search(r'https?://[^\s]+', line)
-                if url_match:
-                    auth_url = url_match.group(0)
-                    break
-
-        if not auth_url:
-            auth_url = "https://claude.ai/login"
-
-        message = f"""
+    message = f"""
 ╔════════════════════════════════════════════════════════════════╗
 ║        CLAUDE ASSISTANT - AUTHENTICATION REQUIRED             ║
 ╚════════════════════════════════════════════════════════════════╝
 
 ✅ Claude Code installed in container
-🔐 Authentication URL generated
+🔐 Ready for authentication
 
-📋 NEXT STEPS:
-  1. Open this URL in your browser: {auth_url}
-  2. Sign in with your Claude Pro/Team account
-  3. Authorize the connection
-  4. Done!
+📋 NEXT STEP:
+  Run this command on your host machine:
+
+  bash ~/Documents/Orchestrate/setup_claude_auth.sh
+
+  This will:
+  • Open browser for Claude OAuth
+  • Complete authentication automatically
+  • Assign a demo task to verify it works
 
 After authentication:
   • Assign tasks via claude_assistant
@@ -241,26 +205,14 @@ After authentication:
 Requirements:
   ✅ Active Claude Pro or Team subscription
 
-Authentication URL: {auth_url}
+Setup Script: ~/Documents/Orchestrate/setup_claude_auth.sh
 """
 
-        return {
-            "status": "success",
-            "message": message,
-            "auth_url": auth_url,
-            "setup_required": True
-        }
-
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "error",
-            "message": "❌ Authentication timed out. Try running: claude /login manually"
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": f"❌ Authentication failed: {str(e)}"
-        }
+    return {
+        "status": "success",
+        "message": message,
+        "setup_required": True
+    }
 
 
 def unlock_marketplace_tool(tool_name):
@@ -310,17 +262,19 @@ def unlock_marketplace_tool(tool_name):
     if available_credits < cost:
         return {"status": "locked", "message": f"🚫 You need {cost} credits to unlock '{tool_name}'."}
 
-    # === Step 3: Pull script from GitHub (downloads even if exists locally)
-    github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-no-bullshit/main/tools/{tool_name}.py"
+    # === Step 3: Use local file or pull from GitHub
     dest_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
 
-    try:
-        response = requests.get(github_url)
-        response.raise_for_status()
-        with open(dest_path, "w") as f:
-            f.write(response.text)
-    except Exception as e:
-        return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
+    # If file doesn't exist locally, try to download it
+    if not os.path.exists(dest_path):
+        github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-no-bullshit/main/tools/{tool_name}.py"
+        try:
+            response = requests.get(github_url)
+            response.raise_for_status()
+            with open(dest_path, "w") as f:
+                f.write(response.text)
+        except Exception as e:
+            return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
 
     # === Step 4: Install dependencies
     def infer_dependencies(path):
