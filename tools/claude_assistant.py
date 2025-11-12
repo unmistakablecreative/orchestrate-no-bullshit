@@ -161,45 +161,6 @@ def assign_task(params):
     }
 
 
-def assign_demo_task(params):
-    """
-    Assigns a task with guaranteed 'demo_' prefix for demo recordings.
-
-    Required:
-    - task_id: unique identifier (will auto-prepend 'demo_' if missing)
-    - description: what Claude should do
-
-    Optional:
-    - priority: high/medium/low (default: medium)
-    - context: extra info for Claude (default: {})
-    - create_output_doc: if true, Claude will create an outline doc (default: false)
-    - auto_execute: same behavior as assign_task (default: true)
-
-    Note: Only adds 'demo_' prefix - all other behavior identical to assign_task
-    """
-    task_id = params.get("task_id")
-
-    if not task_id:
-        return {"status": "error", "message": "❌ Missing required field: task_id"}
-
-    # Force demo_ prefix
-    if not task_id.startswith("demo_"):
-        task_id = f"demo_{task_id}"
-
-    # Update params with modified task_id (preserve all other params including auto_execute)
-    modified_params = params.copy()
-    modified_params["task_id"] = task_id
-
-    # Call assign_task with modified params
-    result = assign_task(modified_params)
-
-    # Add demo-specific message
-    if result.get("status") == "success":
-        result["message"] = f"✅ Demo task '{task_id}' assigned and will execute autonomously"
-
-    return result
-
-
 def check_task_status(params):
     """
     Check status of a task.
@@ -1923,7 +1884,6 @@ def main():
     # Route to correct function
     actions = {
         'assign_task': assign_task,
-        'assign_demo_task': assign_demo_task,
         'batch_assign_tasks': batch_assign_tasks,
         'check_task_status': check_task_status,
         'get_task_result': get_task_result,

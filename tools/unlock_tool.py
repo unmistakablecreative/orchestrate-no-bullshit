@@ -343,9 +343,22 @@ def unlock_marketplace_tool(tool_name):
         with open(script_path, "r") as f:
             tree = ast.parse(f.read(), filename=script_path)
 
+        # Helper functions to skip (internal, not user-facing)
+        claude_assistant_helpers = {
+            "safe_write_queue", "process_queue", "mark_task_in_progress",
+            "execute_queue", "log_task_completion", "capture_token_telemetry",
+            "add_to_memory", "get_working_memory", "clear_working_memory",
+            "archive_thread_logs", "infer_task_type", "get_task_context", "main"
+        }
+
+        # Skip list based on tool
+        skip_functions = {"main", "run", "error"}
+        if tool_name == "claude_assistant":
+            skip_functions.update(claude_assistant_helpers)
+
         actions = []
         for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_") and node.name not in ("main", "run", "error"):
+            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_") and node.name not in skip_functions:
                 param_keys = [arg.arg for arg in node.args.args if arg.arg not in ("self", "params")]
                 for child in ast.walk(node):
                     if isinstance(child, ast.Call) and hasattr(child.func, "attr") and child.func.attr == "get":
