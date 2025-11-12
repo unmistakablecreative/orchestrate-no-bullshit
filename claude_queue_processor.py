@@ -102,6 +102,8 @@ class ClaudeQueueProcessor:
                 claude_path,
                 '-p',
                 '--model', 'haiku',
+                '--allowedTools', 'Write(**)', 'Bash(**)', 'Read(**)', 'Edit(**)',
+                '--',
                 description
             ]
 
