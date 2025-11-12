@@ -1,469 +1,366 @@
-import json
-import sys
-import requests
-import os
+#!/usr/bin/env python3
+"""
+Unlock Tool - Data-Driven Version
 
-# Constants
-BIN_ID = "68292fcf8561e97a50162139"
-API_KEY = "$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C"
-HEADERS = {"X-Master-Key": API_KEY, "Content-Type": "application/json"}
+Handles unlocking of App Store tools through referral credits.
+All tool-specific behavior (costs, messages, setup) defined in orchestrate_app_store.json.
 
-# Paths
-IDENTITY_PATH = "/container_state/system_identity.json"
-NDJSON_PATH = "/opt/orchestrate-core-runtime/system_settings.ndjson"
-UNLOCK_STATUS_PATH = "/opt/orchestrate-core-runtime/data/unlock_status.json"
-
-# === Utilities ===
-def load_system_identity():
-    with open(IDENTITY_PATH, "r") as f:
-        return json.load(f)["user_id"]
-
-def get_ledger():
-    res = requests.get(f"https://api.jsonbin.io/v3/b/{BIN_ID}/latest", headers=HEADERS)
-    res.raise_for_status()
-    return res.json()["record"]
-
-def put_ledger(ledger):
-    payload = {
-        "filename": "install_ledger.json",
-        "installs": ledger["installs"]
-    }
-    res = requests.put(f"https://api.jsonbin.io/v3/b/{BIN_ID}", headers=HEADERS, json=payload)
-    res.raise_for_status()
-
-def load_ndjson(path):
-    with open(path, "r") as f:
-        return [json.loads(line.strip()) for line in f if line.strip()]
-
-def save_ndjson(path, data):
-    with open(path, "w") as f:
-        for entry in data:
-            f.write(json.dumps(entry) + "\n")
-
-def save_unlock_status(user):
-    data = {
-        "unlock_credits": user.get("unlock_credits", 0),
-        "tools_unlocked": user.get("tools_unlocked", [])
-    }
-    os.makedirs(os.path.dirname(UNLOCK_STATUS_PATH), exist_ok=True)
-    with open(UNLOCK_STATUS_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-
-# === Main Unlock Logic ===
-def unlock_tool(tool_name):
-    user_id = load_system_identity()
-    ledger = get_ledger()
-
-    if user_id not in ledger["installs"]:
-        save_unlock_status({})
-        return {
-            "status": "error",
-            "message": "❌ User not found in install_ledger"
-        }
-
-    user = ledger["installs"][user_id]
-    available_credits = user.get("referral_credits", 0)  # Still named this in JSONBin
-    settings = load_ndjson(NDJSON_PATH)
-
-    credential_warning = {
-        "outline_editor": "⚠️ This tool requires your Outline API key. Use system_settings.set_credential() to set it.",
-        "ideogram_tool": "⚠️ This tool requires your Ideogram API key.",
-        "buffer_engine": "⚠️ This tool requires your Twitter API credentials.",
-        "readwise_tool": "⚠️ This tool requires your Readwise API key."
-    }
-
-    for entry in settings:
-        if entry["tool"] == tool_name:
-            if not entry.get("locked", False):
-                save_unlock_status({
-                    "unlock_credits": available_credits,
-                    "tools_unlocked": user.get("tools_unlocked", [])
-                })
-                return {
-                    "status": "noop",
-                    "message": f"⚠️ Tool '{tool_name}' is already unlocked."
-                }
-
-            cost = entry.get("referral_unlock_cost", 1)
-            if available_credits < cost:
-                save_unlock_status({
-                    "unlock_credits": available_credits,
-                    "tools_unlocked": user.get("tools_unlocked", [])
-                })
-                return {
-                    "status": "locked",
-                    "message": f"🚫 You need {cost} credits to unlock '{tool_name}'. Refer someone to earn credits and you'll be able to unlock more tools."
-                }
-
-            # ✅ Perform unlock
-            entry["locked"] = False
-            user["referral_credits"] = available_credits - cost
-            user["tools_unlocked"] = list(set(user.get("tools_unlocked", []) + [tool_name]))
-
-            save_ndjson(NDJSON_PATH, settings)
-            put_ledger(ledger)
-
-            save_unlock_status({
-                "unlock_credits": user["referral_credits"],
-                "tools_unlocked": user["tools_unlocked"]
-            })
-
-            message = f"✅ '{tool_name}' unlocked. Remaining credits: {user['referral_credits']}"
-            if tool_name in credential_warning:
-                message += f"\n{credential_warning[tool_name]}"
-
-            return {
-                "status": "success",
-                "message": message
-            }
-
-    #Tool not in system_settings - check if it's an app store tool
-    import json
-    import os
-
-    APP_STORE_PATH = "/opt/orchestrate-core-runtime/data/orchestrate_app_store.json"
-
-    if os.path.exists(APP_STORE_PATH):
-        with open(APP_STORE_PATH, "r") as f:
-            store_data = json.load(f)
-
-        if tool_name in store_data.get("entries", {}):
-            # Route to unlock_marketplace_tool
-            return unlock_marketplace_tool(tool_name)
-
-    save_unlock_status({
-        "unlock_credits": available_credits,
-        "tools_unlocked": user.get("tools_unlocked", [])
-    })
-
-    return {
-        "status": "error",
-        "message": f"❌ Tool '{tool_name}' not found in system settings or app store."
-    }
-
-
-def trigger_claude_auth():
-    """
-    Trigger the host-side authentication setup script.
-    Writes a trigger file that the host can detect and execute.
-    """
-    import subprocess
-    import os
-
-    # Check if Claude Code is installed
-    claude_path = os.path.expanduser("~/.local/bin/claude")
-
-    if not os.path.exists(claude_path):
-        print("📦 Installing Claude Code in container...", file=sys.stderr)
-
-        # Install Claude Code
-        try:
-            install_result = subprocess.run(
-                ["bash", "-c", "curl -fsSL https://claude.ai/install.sh | bash"],
-                capture_output=True,
-                text=True,
-                timeout=120
-            )
-
-            if install_result.returncode != 0:
-                return {
-                    "status": "error",
-                    "message": f"❌ Failed to install Claude Code: {install_result.stderr}"
-                }
-
-            print("✅ Claude Code installed successfully", file=sys.stderr)
-
-        except Exception as e:
-            return {
-                "status": "error",
-                "message": f"❌ Installation error: {str(e)}"
-            }
-
-    message = f"""
-╔════════════════════════════════════════════════════════════════╗
-║        CLAUDE ASSISTANT - AUTHENTICATION REQUIRED             ║
-╚════════════════════════════════════════════════════════════════╝
-
-✅ Claude Code installed in container
-🔐 Ready for authentication
-
-📋 NEXT STEP:
-  Run this command on your host machine:
-
-  bash ~/Documents/Orchestrate/setup_claude_auth.sh
-
-  This will:
-  • Open browser for Claude OAuth
-  • Complete authentication automatically
-  • Assign a demo task to verify it works
-
-After authentication:
-  • Assign tasks via claude_assistant
-  • Claude executes autonomously inside container
-  • Uses your existing Claude subscription (no extra API costs)
-
-Requirements:
-  ✅ Active Claude Pro or Team subscription
-
-Setup Script: ~/Documents/Orchestrate/setup_claude_auth.sh
+Zero hardcoded tool logic - pure config-driven execution.
 """
 
-    return {
-        "status": "success",
-        "message": message,
-        "setup_required": True
-    }
+import os
+import sys
+import json
+import subprocess
+import requests
+from datetime import datetime
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+APP_STORE_PATH = os.path.join(BASE_DIR, "orchestrate_app_store.json")
+REFERRAL_PATH = os.path.join(BASE_DIR, "container_state", "referrals.json")
+IDENTITY_PATH = os.path.join(BASE_DIR, "container_state", "system_identity.json")
+SYSTEM_REGISTRY = os.path.join(BASE_DIR, "system_settings.ndjson")
+
+# JSONBin config
+JSONBIN_ID = "68292fcf8561e97a50162139"
+JSONBIN_KEY = "$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C"
+
+
+def load_app_store():
+    """Load app store configuration"""
+    try:
+        with open(APP_STORE_PATH, 'r') as f:
+            data = json.load(f)
+            return data.get("entries", {})
+    except Exception as e:
+        return {"error": f"Failed to load app store: {e}"}
+
+
+def load_local_ledger():
+    """Load user's local referral ledger"""
+    try:
+        with open(REFERRAL_PATH, 'r') as f:
+            return json.load(f)
+    except Exception as e:
+        return {"error": f"Failed to load local ledger: {e}"}
+
+
+def save_local_ledger(ledger):
+    """Save updated local ledger"""
+    try:
+        with open(REFERRAL_PATH, 'w') as f:
+            json.dump(ledger, f, indent=2)
+        return {"status": "success"}
+    except Exception as e:
+        return {"error": f"Failed to save local ledger: {e}"}
+
+
+def get_user_id():
+    """Get user's unique ID from system identity"""
+    try:
+        with open(IDENTITY_PATH, 'r') as f:
+            identity = json.load(f)
+            return identity.get("user_id")
+    except Exception as e:
+        return None
+
+
+def sync_to_jsonbin(user_id, ledger):
+    """Sync local ledger to JSONBin cloud"""
+    try:
+        # Fetch current JSONBin state
+        response = requests.get(
+            f"https://api.jsonbin.io/v3/b/{JSONBIN_ID}/latest",
+            headers={"X-Master-Key": JSONBIN_KEY}
+        )
+        
+        if response.status_code != 200:
+            return {"error": "Failed to fetch JSONBin ledger"}
+        
+        full_ledger = response.json().get("record", {})
+        installs = full_ledger.get("installs", {})
+        
+        # Update user's entry
+        installs[user_id] = ledger
+        
+        # Write back to JSONBin
+        updated = {
+            "filename": "install_ledger.json",
+            "installs": installs
+        }
+        
+        response = requests.put(
+            f"https://api.jsonbin.io/v3/b/{JSONBIN_ID}",
+            headers={
+                "Content-Type": "application/json",
+                "X-Master-Key": JSONBIN_KEY
+            },
+            json=updated
+        )
+        
+        if response.status_code == 200:
+            return {"status": "success"}
+        else:
+            return {"error": f"JSONBin sync failed: {response.status_code}"}
+            
+    except Exception as e:
+        return {"error": f"JSONBin sync error: {e}"}
+
+
+def register_tool_actions(tool_name):
+    """Register tool actions in system_settings.ndjson"""
+    try:
+        tool_script = os.path.join(BASE_DIR, "tools", f"{tool_name}.py")
+        
+        if not os.path.exists(tool_script):
+            return {"error": f"Tool script not found: {tool_script}"}
+        
+        # Import system_settings registration function
+        sys.path.insert(0, BASE_DIR)
+        from system_settings import register_tool_from_script
+        
+        result = register_tool_from_script(tool_name, tool_script)
+        return result
+        
+    except Exception as e:
+        return {"error": f"Failed to register actions: {e}"}
+
+
+def run_setup_script(script_path):
+    """Execute tool setup script (e.g., OAuth flow)"""
+    try:
+        full_path = os.path.join(BASE_DIR, script_path)
+        
+        if not os.path.exists(full_path):
+            return {"error": f"Setup script not found: {full_path}"}
+        
+        # Make executable
+        os.chmod(full_path, 0o755)
+        
+        # Run script
+        result = subprocess.run(
+            ["bash", full_path],
+            capture_output=True,
+            text=True,
+            timeout=300  # 5 minute timeout for auth flows
+        )
+        
+        if result.returncode == 0:
+            return {
+                "status": "success",
+                "output": result.stdout
+            }
+        else:
+            return {
+                "error": "Setup script failed",
+                "stderr": result.stderr
+            }
+            
+    except Exception as e:
+        return {"error": f"Setup script execution failed: {e}"}
 
 
 def unlock_marketplace_tool(tool_name):
-    import subprocess
-    import importlib.util
-    import ast
-    import builtins
-    import requests
-    import json
-    import os
-    import sys
-
-    SETTINGS_FILE = "/opt/orchestrate-core-runtime/system_settings.ndjson"
-    TOOLS_DIR = "/opt/orchestrate-core-runtime/tools"
-    APP_STORE_PATH = "/opt/orchestrate-core-runtime/data/orchestrate_app_store.json"
-
-    # === Config: tools that require warnings
-    credential_warnings = {
-        "outline_editor": "⚠️ This tool requires your Outline API key. Use system_settings.set_credential() to set it.",
-        "ideogram_tool": "⚠️ This tool requires your Ideogram API key.",
-        "buffer_engine": "⚠️ This tool requires your Twitter API credentials.",
-        "readwise_tool": "⚠️ This tool requires your Readwise API key.",
-        "nylasinbox": "⚠️ This tool requires your Nylas API credentials.",
-        "notion_tool": "⚠️ This tool requires your Notion API token."
-    }
-
-    # === Step 1: Load ledger + user
-    user_id = load_system_identity()
-    ledger = get_ledger()
-    user = ledger["installs"].get(user_id, {})
-    available_credits = user.get("referral_credits", 0)
-
-    # === Step 2: Load app store metadata
-    if not os.path.exists(APP_STORE_PATH):
-        return {"status": "error", "message": "❌ App store metadata not found."}
-
-    with open(APP_STORE_PATH, "r") as f:
-        store_data = json.load(f)
-
-    store_entry = store_data.get("entries", {}).get(tool_name)
-    if not store_entry:
-        return {"status": "error", "message": f"❌ Tool '{tool_name}' not found in app store."}
-
-    cost = store_entry.get("referral_unlock_cost", 1)
-    description = store_entry.get("description", "No description available.")
-
-    if available_credits < cost:
-        return {"status": "locked", "message": f"🚫 You need {cost} credits to unlock '{tool_name}'."}
-
-    # === Step 3: Use local file or pull from GitHub
-    dest_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
-
-    # If file doesn't exist locally, try to download it
-    if not os.path.exists(dest_path):
-        github_url = f"https://raw.githubusercontent.com/unmistakablecreative/orchestrate-no-bullshit/main/tools/{tool_name}.py"
-        try:
-            response = requests.get(github_url)
-            response.raise_for_status()
-            with open(dest_path, "w") as f:
-                f.write(response.text)
-        except Exception as e:
-            return {"status": "error", "message": f"❌ Failed to fetch tool script: {str(e)}"}
-
-    # === Step 4: Install dependencies
-    def infer_dependencies(path):
-        required = set()
-        with open(path, "r") as f:
-            for line in f:
-                if line.startswith("import ") or line.startswith("from "):
-                    parts = line.replace(",", " ").split()
-                    if parts[0] in ("import", "from") and len(parts) > 1:
-                        required.add(parts[1].split(".")[0])
-        return list(required)
-
-    def install_deps(deps):
-        installed, skipped = [], []
-        stdlib = set(sys.builtin_module_names).union(set(dir(builtins)))
-        for dep in deps:
-            if dep in stdlib or importlib.util.find_spec(dep):
-                skipped.append(dep)
-                continue
-            try:
-                subprocess.run([sys.executable, "-m", "pip", "install", dep], check=True)
-                installed.append(dep)
-            except Exception as e:
-                return {"status": "error", "message": f"❌ Failed to install {dep}", "details": str(e)}
-        return {"status": "success", "message": f"✅ Installed: {installed or 'None'} | Skipped: {skipped or 'None'}"}
-
-    dep_result = install_deps(infer_dependencies(dest_path))
-    if dep_result["status"] != "success":
-        return dep_result
-
-    # === Step 5: Extract actions
-    def extract_actions(script_path, tool_name):
-        with open(script_path, "r") as f:
-            tree = ast.parse(f.read(), filename=script_path)
-
-        # Helper functions to skip (internal, not user-facing)
-        claude_assistant_helpers = {
-            "safe_write_queue", "process_queue", "mark_task_in_progress",
-            "execute_queue", "log_task_completion", "capture_token_telemetry",
-            "add_to_memory", "get_working_memory", "clear_working_memory",
-            "archive_thread_logs", "infer_task_type", "get_task_context", "main"
-        }
-
-        # Skip list based on tool
-        skip_functions = {"main", "run", "error"}
-        if tool_name == "claude_assistant":
-            skip_functions.update(claude_assistant_helpers)
-
-        actions = []
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_") and node.name not in skip_functions:
-                param_keys = [arg.arg for arg in node.args.args if arg.arg not in ("self", "params")]
-                for child in ast.walk(node):
-                    if isinstance(child, ast.Call) and hasattr(child.func, "attr") and child.func.attr == "get":
-                        if child.args and isinstance(child.args[0], ast.Str):
-                            key = child.args[0].s
-                            if key not in param_keys:
-                                param_keys.append(key)
-
-                example = {
-                    "tool_name": tool_name,
-                    "action": node.name,
-                    "params": {k: f"<{k}>" for k in param_keys}
-                }
-
-                actions.append({
-                    "tool": tool_name,
-                    "action": node.name,
-                    "script_path": f"tools/{tool_name}.py",
-                    "params": param_keys,
-                    "example": example
-                })
-        return actions
-
-    # === Step 6: Update system_settings.ndjson
-    def load_settings():
-        with open(SETTINGS_FILE, "r") as f:
-            return [json.loads(line) for line in f if line.strip()]
-
-    def save_settings(data):
-        with open(SETTINGS_FILE, "w") as f:
-            for entry in data:
-                f.write(json.dumps(entry) + "\n")
-
-    settings = load_settings()
-    keys = {(s["tool"], s["action"]) for s in settings}
-
-    # Inject __tool__ entry with description
-    tool_key = (tool_name, "__tool__")
-    if tool_key not in keys:
-        settings.append({
-            "tool": tool_name,
-            "action": "__tool__",
-            "script_path": f"tools/{tool_name}.py",
-            "locked": False,
-            "referral_unlock_cost": cost,
-            "description": description
-        })
-
-    # Inject actions
-    actions = extract_actions(dest_path, tool_name)
-    for a in actions:
-        key = (a["tool"], a["action"])
-        if key not in keys:
-            settings.append(a)
-
-    save_settings(settings)
-
-    # === Step 7: Debit user + save
-    user["referral_credits"] -= cost
-    user.setdefault("tools_unlocked", []).append(tool_name)
-    user["tools_unlocked"] = list(set(user["tools_unlocked"]))
-    ledger["installs"][user_id] = user
-    put_ledger(ledger)
-    save_unlock_status({
-        "unlock_credits": user["referral_credits"],
-        "tools_unlocked": user["tools_unlocked"]
-    })
-
-    # === Special handling for claude_assistant ===
-    if tool_name == "claude_assistant":
-        # Trigger Claude Code installation and authentication setup
-        auth_result = trigger_claude_auth()
-
-        # If installation/auth failed, return error
-        if auth_result.get("status") == "error":
-            return auth_result
-
-        # Apply Orchestrate Claude Code configuration (facelift)
-        try:
-            facelift_script = "/opt/orchestrate-core-runtime/apply_claude_facelift.sh"
-            facelift_result = subprocess.run(
-                ["bash", facelift_script],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if facelift_result.returncode == 0:
-                print("✅ Claude Code configured for Orchestrate", file=sys.stderr)
-            else:
-                print(f"⚠️ Facelift warning: {facelift_result.stderr}", file=sys.stderr)
-        except Exception as e:
-            print(f"⚠️ Could not apply Claude facelift: {e}", file=sys.stderr)
-
+    """
+    Main unlock function - data-driven from app store config
+    
+    Flow:
+    1. Load tool config from app store
+    2. Check user has enough credits
+    3. Deduct credits
+    4. Add to tools_unlocked
+    5. Sync to JSONBin
+    6. Register tool actions
+    7. Run setup script if needed
+    8. Return unlock message
+    """
+    
+    # Load app store config
+    app_store = load_app_store()
+    if "error" in app_store:
+        return app_store
+    
+    if tool_name not in app_store:
+        return {"error": f"Tool '{tool_name}' not found in app store"}
+    
+    tool_config = app_store[tool_name]
+    
+    # Load local ledger
+    ledger = load_local_ledger()
+    if "error" in ledger:
+        return ledger
+    
+    # Check if already unlocked
+    unlocked_tools = ledger.get("tools_unlocked", [])
+    if tool_name in unlocked_tools:
         return {
-            "status": "success",
-            "message": f"✅ '{tool_name}' unlocked!\n\n{auth_result.get('message', '')}",
-            "actions": [a["action"] for a in actions],
-            "dependencies": dep_result.get("message"),
-            "credentials": credential_warnings.get(tool_name, "—"),
-            "setup_required": True,
-            "auth_url": auth_result.get("auth_url"),
-            "setup_instructions": auth_result.get("message")
+            "status": "already_unlocked",
+            "message": f"✅ {tool_config['label']} is already unlocked"
         }
+    
+    # Check credits
+    cost = tool_config.get("referral_unlock_cost", 0)
+    current_credits = ledger.get("referral_credits", 0)
+    
+    if current_credits < cost:
+        return {
+            "error": f"Insufficient credits. Need {cost}, have {current_credits}",
+            "credits_needed": cost - current_credits
+        }
+    
+    # Deduct credits
+    ledger["referral_credits"] -= cost
+    
+    # Add to unlocked tools
+    ledger["tools_unlocked"].append(tool_name)
+    
+    # Save local ledger
+    save_result = save_local_ledger(ledger)
+    if "error" in save_result:
+        return save_result
+    
+    # Sync to JSONBin
+    user_id = get_user_id()
+    if user_id:
+        sync_result = sync_to_jsonbin(user_id, ledger)
+        if "error" in sync_result:
+            # Non-fatal - local unlock still worked
+            print(f"Warning: JSONBin sync failed: {sync_result['error']}", file=sys.stderr)
+    
+    # Register tool actions
+    register_result = register_tool_actions(tool_name)
+    if "error" in register_result:
+        return {
+            "error": "Tool unlocked but action registration failed",
+            "details": register_result["error"]
+        }
+    
+    # Run setup script if specified
+    setup_output = None
+    if "setup_script" in tool_config:
+        setup_result = run_setup_script(tool_config["setup_script"])
+        if "error" in setup_result:
+            return {
+                "status": "partial_success",
+                "message": "Tool unlocked and registered, but setup script failed",
+                "setup_error": setup_result["error"],
+                "unlock_message": tool_config.get("unlock_message", "Tool unlocked")
+            }
+        setup_output = setup_result.get("output")
+    
+    # Build success response
+    response = {
+        "status": "success",
+        "tool": tool_name,
+        "label": tool_config["label"],
+        "credits_remaining": ledger["referral_credits"],
+        "unlock_message": tool_config.get("unlock_message", f"✅ {tool_config['label']} unlocked!")
+    }
+    
+    # Add setup output if present
+    if setup_output:
+        response["setup_output"] = setup_output
+    
+    # Add post-unlock nudge if present
+    if "post_unlock_nudge" in tool_config:
+        response["nudge"] = tool_config["post_unlock_nudge"]
+    
+    return response
 
-    # === Final response
+
+def list_marketplace_tools():
+    """List all available marketplace tools with lock status"""
+    app_store = load_app_store()
+    if "error" in app_store:
+        return app_store
+    
+    ledger = load_local_ledger()
+    if "error" in ledger:
+        return ledger
+    
+    unlocked = set(ledger.get("tools_unlocked", []))
+    credits = ledger.get("referral_credits", 0)
+    
+    tools = []
+    for tool_name, config in app_store.items():
+        tools.append({
+            "name": tool_name,
+            "label": config["label"],
+            "description": config["description"],
+            "cost": config.get("referral_unlock_cost", 0),
+            "priority": config.get("priority", 999),
+            "locked": tool_name not in unlocked,
+            "requires_subscription": config.get("requires_subscription", False),
+            "subscription_type": config.get("subscription_type", None)
+        })
+    
+    # Sort by priority
+    tools.sort(key=lambda x: x["priority"])
+    
     return {
         "status": "success",
-        "message": f"✅ '{tool_name}' fully installed, unlocked, and ready to use.",
-        "actions": [a["action"] for a in actions],
-        "dependencies": dep_result.get("message"),
-        "credentials": credential_warnings.get(tool_name, "—")
+        "credits_available": credits,
+        "tools": tools
     }
 
 
+def get_credits_balance():
+    """Get current credit balance"""
+    ledger = load_local_ledger()
+    if "error" in ledger:
+        return ledger
+    
+    return {
+        "status": "success",
+        "credits": ledger.get("referral_credits", 0),
+        "referral_count": ledger.get("referral_count", 0),
+        "tools_unlocked": ledger.get("tools_unlocked", [])
+    }
 
-# === Entrypoint Router ===
-def run(params, action):
+
+# Action registry for execution_hub
+ACTIONS = {
+    "unlock_marketplace_tool": unlock_marketplace_tool,
+    "list_marketplace_tools": list_marketplace_tools,
+    "get_credits_balance": get_credits_balance
+}
+
+
+def execute_action(action, params):
+    """Execute unlock tool action"""
+    if action not in ACTIONS:
+        return {"error": f"Unknown action: {action}"}
+    
     try:
-        tool_name = params.get("tool_name")
-        if action == "unlock_tool":
-            return unlock_tool(tool_name)
-        elif action == "unlock_marketplace_tool":
-            return unlock_marketplace_tool(tool_name)
-        else:
-            return {"status": "error", "message": f"Unknown action '{action}'"}
+        return ACTIONS[action](**params)
     except Exception as e:
-        return {"status": "error", "message": "Execution failed", "details": str(e)}
+        return {"error": f"Action execution failed: {e}"}
+
 
 if __name__ == "__main__":
-    parser = sys.argv
-    if len(parser) < 3 or not parser[1] in ["unlock_tool", "unlock_marketplace_tool"]:
-        print(json.dumps({
-            "status": "error",
-            "message": "Usage: python unlock_tool.py <action> --params '{\"tool_name\": \"calendar_tool\"}'"
-        }, indent=2))
+    # CLI usage
+    if len(sys.argv) < 2:
+        print("Usage: unlock_tool.py <action> [params...]")
+        print("Actions: unlock_marketplace_tool, list_marketplace_tools, get_credits_balance")
         sys.exit(1)
-
-    raw_params = json.loads(parser[3]) if parser[2] == "--params" else {}
-    result = run(raw_params, parser[1])
-    print(json.dumps(result, indent=2))
+    
+    action = sys.argv[1]
+    
+    if action == "unlock_marketplace_tool":
+        if len(sys.argv) < 3:
+            print("Usage: unlock_tool.py unlock_marketplace_tool <tool_name>")
+            sys.exit(1)
+        result = unlock_marketplace_tool(sys.argv[2])
+        print(json.dumps(result, indent=2))
+    
+    elif action == "list_marketplace_tools":
+        result = list_marketplace_tools()
+        print(json.dumps(result, indent=2))
+    
+    elif action == "get_credits_balance":
+        result = get_credits_balance()
+        print(json.dumps(result, indent=2))
+    
+    else:
+        print(f"Unknown action: {action}")
+        sys.exit(1)

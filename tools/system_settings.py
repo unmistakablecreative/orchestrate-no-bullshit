@@ -1,1273 +1,357 @@
-# ✅ REFACTORED system_settings.py — fully Execution Hub–compatible, handles .md files, returns consistent output
+#!/usr/bin/env python3
+"""
+System Settings Manager
+
+Handles:
+- Loading/saving system_settings.ndjson
+- Registering tool actions automatically from tool scripts
+- Merging unlock status with tool registry
+- Runtime refresh (pull updates while preserving user data)
+"""
 
 import os
-import json
-import argparse
 import sys
+import json
+import importlib.util
+import inspect
+import subprocess
+import shutil
 
-TOOLS_DIR = os.path.dirname(os.path.abspath(__file__))
-ROOT_DIR = os.path.abspath(os.path.join(TOOLS_DIR, ".."))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SYSTEM_REGISTRY = os.path.join(BASE_DIR, "system_settings.ndjson")
+TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 
-SETTINGS_FILE = os.path.join(ROOT_DIR, "system_settings.ndjson")
-CREDENTIALS_FILE = os.path.join(TOOLS_DIR, "credentials.json")
-MEMORY_INDEX_FILE = os.path.join(ROOT_DIR, "memory_index.json")
-ROUTER_MAP_FILE = os.path.join(TOOLS_DIR, "router_map.json")
-WORKING_MEMORY_PATH = os.path.join(ROOT_DIR, "data", "working_memory.json")
-DASHBOARD_INDEX_PATH = os.path.join(ROOT_DIR, "data", "dashboard_index.json")
 
-def output(data):
-    print(json.dumps(data, indent=2))
-    sys.exit(0)
-
-def error(message):
-    print(json.dumps({"status": "error", "message": message}, indent=2))
-    sys.exit(1)
-
-# === Credentials ===
-def set_credential(params):
-    import os
-    import json
-    import re
-
-    value = params.get("value")
-    script_path = params.get("script_path")
-
-    if not value:
-        return {"status": "error", "message": "❌ Missing 'value' in params"}
-    if not script_path:
-        return {"status": "error", "message": "❌ Missing 'script_path' in params"}
-    
-    # Handle both absolute and relative paths
-    if not os.path.isabs(script_path):
-        script_path = os.path.join(os.getcwd(), script_path)
-    
-    if not os.path.exists(script_path):
-        return {"status": "error", "message": f"❌ Script not found: {script_path}"}
-
-    expected_keys = set()
-
+def load_registry():
+    """Load system_settings.ndjson as list of entries"""
     try:
-        with open(script_path, "r", encoding="utf-8") as f:
-            content = f.read()
-
-        # ✅ Targeted pattern matching - only catch specific credential access patterns
-        patterns = [
-            # load_credential("key") or load_credential('key') - most reliable
-            r'load_credential\([\'"]([a-zA-Z0-9_]{3,40})[\'"]\)',
-            
-            # creds.get("key") or creds.get('key') - reliable
-            r'creds\.get\([\'"]([a-zA-Z0-9_]{3,40})[\'"]\)',
-            
-            # creds["key"] or creds['key'] - reliable
-            r'creds\[[\'"]([a-zA-Z0-9_]{3,40})[\'"]\]',
-        ]
-
-        for pattern in patterns:
-            matches = re.findall(pattern, content, re.IGNORECASE)
-            for match in matches:
-                if match and len(match) >= 5:
-                    # Filter out ONLY overly generic single-word keys
-                    if match.lower() not in ['api_key', 'token', 'secret', 'access_token', 'key', 'value', 'creds', 'credential']:
-                        # If it has an underscore OR ends with common suffixes, it's valid
-                        if '_' in match or any(match.lower().endswith(suffix) for suffix in ['_api_key', '_token', '_secret', '_key', 'api_key', 'token', 'secret']):
-                            expected_keys.add(match)
-
+        with open(SYSTEM_REGISTRY, 'r') as f:
+            return [json.loads(line.strip()) for line in f if line.strip()]
     except Exception as e:
-        return {"status": "error", "message": f"❌ Failed to parse script: {str(e)}"}
-
-    if not expected_keys:
-        return {
-            "status": "error",
-            "message": "❌ No credential keys found in script. Supported patterns: load_credential(), creds.get(), creds[]"
-        }
-
-    # === Inject into credentials.json ===
-    # Always use credentials.json in the same directory as the script
-    creds_path = os.path.join(os.path.dirname(script_path), "credentials.json")
-
-    creds = {}
-    if os.path.exists(creds_path):
-        try:
-            with open(creds_path, "r") as f:
-                creds = json.load(f)
-        except:
-            creds = {}
-    # If file doesn't exist, it will be created when we write below
-
-    # Set all found keys to the same value
-    for key in expected_keys:
-        creds[key] = value
-
-    with open(creds_path, "w") as f:
-        json.dump(creds, f, indent=2)
-
-    return {
-        "status": "success",
-        "keys_set": list(expected_keys),
-        "credentials_file": creds_path,
-        "message": f"✅ Credential injected into: {', '.join(expected_keys)}"
-    }
+        return {"error": f"Failed to load registry: {e}"}
 
 
+def save_registry(entries):
+    """Save registry entries back to system_settings.ndjson"""
+    try:
+        with open(SYSTEM_REGISTRY, 'w') as f:
+            for entry in entries:
+                f.write(json.dumps(entry) + '\n')
+        return {"status": "success"}
+    except Exception as e:
+        return {"error": f"Failed to save registry: {e}"}
 
-def load_credential(key):
-    if not os.path.exists(CREDENTIALS_FILE):
-        return None
-    with open(CREDENTIALS_FILE, "r") as f:
-        creds = json.load(f)
-    return creds.get(key)
+
+def extract_actions_from_script(tool_script_path):
+    """
+    Extract actions from tool script by looking for ACTIONS dict
+    
+    Returns list of action definitions with parameters
+    """
+    try:
+        # Load the tool module
+        spec = importlib.util.spec_from_file_location("tool_module", tool_script_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        
+        # Look for ACTIONS dictionary
+        if not hasattr(module, 'ACTIONS'):
+            return {"error": f"Tool script has no ACTIONS dictionary"}
+        
+        actions_dict = module.ACTIONS
+        
+        # Extract action metadata
+        actions = []
+        for action_name, action_func in actions_dict.items():
+            # Get function signature
+            sig = inspect.signature(action_func)
+            params = []
+            
+            for param_name, param in sig.parameters.items():
+                param_info = {
+                    "name": param_name,
+                    "required": param.default == inspect.Parameter.empty
+                }
+                
+                # Try to infer type from annotation
+                if param.annotation != inspect.Parameter.empty:
+                    param_info["type"] = param.annotation.__name__
+                
+                params.append(param_info)
+            
+            # Get docstring if available
+            description = action_func.__doc__ or f"Execute {action_name}"
+            description = description.strip().split('\n')[0]  # First line only
+            
+            actions.append({
+                "action": action_name,
+                "description": description,
+                "parameters": params
+            })
+        
+        return {"status": "success", "actions": actions}
+        
+    except Exception as e:
+        return {"error": f"Failed to extract actions: {e}"}
 
 
-# === Tool Registry ===
-def load_settings():
-    if not os.path.exists(SETTINGS_FILE):
-        return []
-    with open(SETTINGS_FILE, "r") as f:
-        return [json.loads(line) for line in f if line.strip()]
-
-def save_settings(data):
-    with open(SETTINGS_FILE, "w") as f:
-        for entry in data:
-            f.write(json.dumps(entry) + "\n")
-
-def add_tool(params):
-    tool, path = params.get("tool"), params.get("path")
-    if not tool or not path:
-        error("Missing 'tool' or 'path'")
-
-    entry = {
-        "tool": tool,
+def register_tool_from_script(tool_name, tool_script_path=None):
+    """
+    Register a tool and all its actions in system_settings.ndjson
+    
+    Args:
+        tool_name: Name of the tool (e.g., "claude_assistant")
+        tool_script_path: Path to tool script (optional, will auto-detect)
+    
+    Returns:
+        {"status": "success"} or {"error": "message"}
+    """
+    
+    # Auto-detect script path if not provided
+    if tool_script_path is None:
+        tool_script_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
+    
+    if not os.path.exists(tool_script_path):
+        return {"error": f"Tool script not found: {tool_script_path}"}
+    
+    # Extract actions from script
+    extract_result = extract_actions_from_script(tool_script_path)
+    if "error" in extract_result:
+        return extract_result
+    
+    actions = extract_result["actions"]
+    
+    # Load current registry
+    registry = load_registry()
+    if "error" in registry:
+        return registry
+    
+    # Remove any existing entries for this tool
+    registry = [entry for entry in registry 
+                if entry.get("tool") != tool_name]
+    
+    # Add tool header entry
+    registry.append({
+        "tool": tool_name,
         "action": "__tool__",
-        "script_path": path
-    }
-
-    # ✅ Optional lock flags
-    if "locked" in params:
-        entry["locked"] = params["locked"]
-    if "referral_unlock_cost" in params:
-        entry["referral_unlock_cost"] = params["referral_unlock_cost"]
-
-    data = load_settings()
-    data.append(entry)
-    save_settings(data)
-
-    return {"status": "success", "message": f"Tool '{tool}' registered."}
-
-
-def remove_tool(params):
-    tool = params.get("tool")
-    if not tool:
-        error("Missing 'tool'")
-    data = load_settings()
-    updated = [d for d in data if d["tool"] != tool]
-    save_settings(updated)
-    return {"status": "success", "message": f"Tool '{tool}' and all actions removed."}
-
-def list_tools(_):
-    return {"status": "success", "tools": [d for d in load_settings() if d["action"] == "__tool__"]}
-
-
-def add_action(params):
-    required = ["tool", "action", "script", "params", "example"]
-    if not all(k in params for k in required):
-        error("Missing one of: tool, action, script, params, example")
-    
-    data = load_settings()
-    
-    # Add the new action
-    data.append({
-        "tool": params["tool"],
-        "action": params["action"],
-        "script_path": params["script"],
-        "params": params["params"],
-        "example": params["example"]
+        "description": f"{tool_name} tool",
+        "unlocked": True  # Newly unlocked tools are available
     })
     
-    # 🔧 Sort all actions: first by tool, then by action name
-    data.sort(key=lambda x: (x["tool"], x["action"]))
-    
-    save_settings(data)
-    
-    return {"status": "success", "message": f"Action '{params['action']}' added to '{params['tool']}'."}
-
-def remove_action(params):
-    tool = params.get("tool")
-    action = params.get("action")
-    if not tool or not action:
-        error("Missing 'tool' or 'action'")
-    data = load_settings()
-    updated = [d for d in data if not (d["tool"] == tool and d["action"] == action)]
-    save_settings(updated)
-    return {"status": "success", "message": f"Action '{action}' removed from tool '{tool}'."}
-
-
-def list_actions(params):
-    tool = params.get("tool")
-    all_actions = [d for d in load_settings() if d["action"] != "__tool__"]
-    return {"status": "success", "actions": [a for a in all_actions if a["tool"] == tool] if tool else all_actions}
-
-
-# === Memory Index ===
-
-def load_memory_index():
-    """Load memory_index.json and return the 'entries' list. Compatible with schema and legacy list fallback."""
-    if not os.path.exists(MEMORY_INDEX_FILE):
-        return []
-    try:
-        with open(MEMORY_INDEX_FILE, "r") as f:
-            data = json.load(f)
-            if isinstance(data, dict) and "entries" in data:
-                return data["entries"]
-            elif isinstance(data, list):
-                return data  # legacy fallback
-    except Exception:
-        return []
-    return []
-
-def save_memory_index(index):
-    """Always write valid schema: { 'entries': [ ... ] }"""
-    with open(MEMORY_INDEX_FILE, "w") as f:
-        json.dump({"entries": index}, f, indent=2)
-
-def add_memory_file(params):
-    path = params.get("path")
-    if not path:
-        error("Missing 'path'")
-    index = load_memory_index()
-    if path not in index:
-        index.append(path)
-        save_memory_index(index)
-    return {"status": "success", "message": f"Memory file '{path}' added."}
-
-def remove_memory_file(params):
-    path = params.get("path")
-    if not path:
-        error("Missing 'path'")
-    index = load_memory_index()
-    if path in index:
-        index.remove(path)
-        save_memory_index(index)
-        return {"status": "success", "message": f"Memory file '{path}' removed."}
-    return {"status": "error", "message": f"File '{path}' not found in memory index."}
-
-def list_memory_files(_):
-    return {"status": "success", "memory_files": load_memory_index()}
-
-def build_working_memory(_):
-    index = load_memory_index()
-    memory = {}
-
-    for rel_path in index:
-        key = rel_path if not rel_path.startswith("/") else os.path.relpath(rel_path, ROOT_DIR)
-        abs_path = os.path.join(ROOT_DIR, rel_path) if not os.path.isabs(rel_path) else rel_path
-
-        if not os.path.exists(abs_path):
-            memory[key] = f"<<ERROR: File not found — {rel_path}>>"
-            continue
-
-        try:
-            with open(abs_path, "r") as f:
-                if abs_path.endswith(".ndjson"):
-                    memory[key] = [json.loads(line) for line in f if line.strip()]
-                elif abs_path.endswith(".json"):
-                    memory[key] = json.load(f)
-                else:
-                    memory[key] = f.read()
-        except Exception as e:
-            memory[key] = f"<<ERROR: {str(e)}>>"
-
-    os.makedirs(os.path.dirname(WORKING_MEMORY_PATH), exist_ok=True)
-    with open(WORKING_MEMORY_PATH, "w") as f:
-        json.dump(memory, f, indent=2)
-
-    return {
-        "status": "success",
-        "message": f"Working memory rebuilt clean at {WORKING_MEMORY_PATH}"
-    }
-
-
-# === Dashboard Index Management ===
-
-def load_dashboard_index():
-    """Load dashboard_index.json"""
-    if not os.path.exists(DASHBOARD_INDEX_PATH):
-        return {"dashboard_items": [], "config": {}}
-    try:
-        with open(DASHBOARD_INDEX_PATH, "r") as f:
-            return json.load(f)
-    except Exception:
-        return {"dashboard_items": [], "config": {}}
-
-def save_dashboard_index(data):
-    """Save dashboard_index.json"""
-    os.makedirs(os.path.dirname(DASHBOARD_INDEX_PATH), exist_ok=True)
-    with open(DASHBOARD_INDEX_PATH, "w") as f:
-        json.dump(data, f, indent=2)
-
-def add_dashboard_item(params):
-    """
-    Add new dashboard item
-    Required: key, source, display_type, formatter
-    Optional: file (if source=file), tool/action/params (if source=tool_action), 
-              priority, limit, description, enabled
-    """
-    key = params.get("key")
-    source = params.get("source")
-    
-    if not key or not source:
-        return {"status": "error", "message": "Missing 'key' or 'source'"}
-    
-    if source not in ["file", "tool_action"]:
-        return {"status": "error", "message": "source must be 'file' or 'tool_action'"}
-    
-    dashboard = load_dashboard_index()
-    
-    # Check if key already exists
-    if any(item.get("key") == key for item in dashboard["dashboard_items"]):
-        return {"status": "error", "message": f"Dashboard item '{key}' already exists"}
-    
-    # Build new item
-    new_item = {
-        "key": key,
-        "source": source,
-        "display_type": params.get("display_type", "raw"),
-        "formatter": params.get("formatter", "passthrough"),
-        "priority": params.get("priority", len(dashboard["dashboard_items"]) + 1),
-        "enabled": params.get("enabled", True)
-    }
-    
-    # Add source-specific fields
-    if source == "file":
-        if "file" not in params:
-            return {"status": "error", "message": "Missing 'file' path for file source"}
-        new_item["file"] = params["file"]
+    # Add action entries
+    for action in actions:
+        entry = {
+            "tool": tool_name,
+            "action": action["action"],
+            "description": action["description"]
+        }
         
-        # Validate file exists
-        file_path = os.path.join(ROOT_DIR, params["file"])
-        if not os.path.exists(file_path):
-            return {"status": "error", "message": f"File not found: {params['file']}"}
-    
-    elif source == "tool_action":
-        if "tool" not in params or "action" not in params:
-            return {"status": "error", "message": "Missing 'tool' or 'action' for tool_action source"}
-        new_item["tool"] = params["tool"]
-        new_item["action"] = params["action"]
-        new_item["params"] = params.get("params", {})
+        # Add parameters if present
+        if action["parameters"]:
+            entry["parameters"] = action["parameters"]
         
-        # Validate tool/action exists in registry
-        settings = load_settings()
-        tool_exists = any(
-            s.get("tool") == params["tool"] and s.get("action") == params["action"]
-            for s in settings
-        )
-        if not tool_exists:
-            return {"status": "error", "message": f"Tool action '{params['tool']}.{params['action']}' not found in registry"}
+        registry.append(entry)
     
-    # Optional fields
-    if "limit" in params:
-        new_item["limit"] = params["limit"]
-    if "description" in params:
-        new_item["description"] = params["description"]
-    
-    dashboard["dashboard_items"].append(new_item)
-    
-    # Sort by priority
-    dashboard["dashboard_items"].sort(key=lambda x: x.get("priority", 999))
-    
-    save_dashboard_index(dashboard)
+    # Save updated registry
+    save_result = save_registry(registry)
+    if "error" in save_result:
+        return save_result
     
     return {
         "status": "success",
-        "message": f"✅ Dashboard item '{key}' added",
-        "item": new_item
+        "tool": tool_name,
+        "actions_registered": len(actions)
     }
 
-def remove_dashboard_item(params):
-    """Remove dashboard item by key"""
-    key = params.get("key")
-    if not key:
-        return {"status": "error", "message": "Missing 'key'"}
+
+def get_tool_actions(tool_name):
+    """Get all registered actions for a tool"""
+    registry = load_registry()
+    if "error" in registry:
+        return registry
     
-    dashboard = load_dashboard_index()
-    original_count = len(dashboard["dashboard_items"])
-    
-    dashboard["dashboard_items"] = [
-        item for item in dashboard["dashboard_items"] 
-        if item.get("key") != key
-    ]
-    
-    if len(dashboard["dashboard_items"]) == original_count:
-        return {"status": "error", "message": f"Dashboard item '{key}' not found"}
-    
-    save_dashboard_index(dashboard)
+    actions = [entry for entry in registry 
+               if entry.get("tool") == tool_name 
+               and entry.get("action") != "__tool__"]
     
     return {
         "status": "success",
-        "message": f"✅ Dashboard item '{key}' removed"
-    }
-
-def update_dashboard_item(params):
-    """
-    Update existing dashboard item
-    Required: key
-    Optional: Any field to update (source, file, tool, action, display_type, formatter, priority, etc.)
-    """
-    key = params.get("key")
-    if not key:
-        return {"status": "error", "message": "Missing 'key'"}
-    
-    dashboard = load_dashboard_index()
-    item_found = False
-    
-    for item in dashboard["dashboard_items"]:
-        if item.get("key") == key:
-            item_found = True
-            
-            # Update all provided fields except 'key'
-            for param_key, param_value in params.items():
-                if param_key != "key":
-                    item[param_key] = param_value
-            
-            # Validate if source changed
-            if "source" in params:
-                source = params["source"]
-                if source == "file" and "file" not in item:
-                    return {"status": "error", "message": "Cannot change to file source without 'file' field"}
-                elif source == "tool_action" and ("tool" not in item or "action" not in item):
-                    return {"status": "error", "message": "Cannot change to tool_action source without 'tool' and 'action' fields"}
-            
-            break
-    
-    if not item_found:
-        return {"status": "error", "message": f"Dashboard item '{key}' not found"}
-    
-    # Re-sort by priority
-    dashboard["dashboard_items"].sort(key=lambda x: x.get("priority", 999))
-    
-    save_dashboard_index(dashboard)
-    
-    return {
-        "status": "success",
-        "message": f"✅ Dashboard item '{key}' updated"
-    }
-
-def reorder_dashboard(params):
-    """
-    Bulk reorder dashboard items by priority
-    Accepts: {"ordering": [{"key": "intent_routes", "priority": 1}, ...]}
-    """
-    ordering = params.get("ordering")
-    if not ordering or not isinstance(ordering, list):
-        return {"status": "error", "message": "Missing or invalid 'ordering' list"}
-    
-    dashboard = load_dashboard_index()
-    
-    # Create priority map
-    priority_map = {item["key"]: item["priority"] for item in ordering}
-    
-    # Update priorities
-    for item in dashboard["dashboard_items"]:
-        if item["key"] in priority_map:
-            item["priority"] = priority_map[item["key"]]
-    
-    # Sort by new priorities
-    dashboard["dashboard_items"].sort(key=lambda x: x.get("priority", 999))
-    
-    save_dashboard_index(dashboard)
-    
-    return {
-        "status": "success",
-        "message": f"✅ Reordered {len(priority_map)} dashboard items"
-    }
-
-def list_dashboard_items(_):
-    """Return full dashboard configuration"""
-    dashboard = load_dashboard_index()
-    return {
-        "status": "success",
-        "dashboard": dashboard
-    }
-
-def toggle_dashboard_item(params):
-    """Enable or disable dashboard item without deleting"""
-    key = params.get("key")
-    enabled = params.get("enabled")
-    
-    if not key:
-        return {"status": "error", "message": "Missing 'key'"}
-    if enabled is None:
-        return {"status": "error", "message": "Missing 'enabled' (true/false)"}
-    
-    dashboard = load_dashboard_index()
-    item_found = False
-    
-    for item in dashboard["dashboard_items"]:
-        if item.get("key") == key:
-            item["enabled"] = enabled
-            item_found = True
-            break
-    
-    if not item_found:
-        return {"status": "error", "message": f"Dashboard item '{key}' not found"}
-    
-    save_dashboard_index(dashboard)
-    
-    status_text = "enabled" if enabled else "disabled"
-    return {
-        "status": "success",
-        "message": f"✅ Dashboard item '{key}' {status_text}"
+        "tool": tool_name,
+        "actions": actions
     }
 
 
-# === Existing Functions Continue Below ===
-
-def install_tool(params):
-    import ast
-    import os
-
-    ROOT_DIR = os.getcwd()
-    script_path = params.get("script_path")
-    if not script_path:
-        return {"status": "error", "message": "Missing 'script_path'"}
-
-    abs_path = os.path.join(ROOT_DIR, script_path)
-    if not os.path.exists(abs_path):
-        return {"status": "error", "message": f"Script path not found: {abs_path}"}
-
-    module_name = os.path.splitext(os.path.basename(abs_path))[0]
-
-    tool_entry = {
-        "tool": module_name,
-        "action": "__tool__",
-        "script_path": script_path
-    }
-
-    settings = load_settings()
-    settings.append(tool_entry)
-
-    try:
-        with open(abs_path, "r") as f:
-            code = f.read()
-    except Exception as e:
-        return {"status": "error", "message": f"Failed to read script: {str(e)}"}
-
-    def extract_actions_with_params(script_text):
-        tree = ast.parse(script_text)
-        actions = []
-
-        for node in tree.body:
-            if (
-                isinstance(node, ast.FunctionDef)
-                and not node.name.startswith("_")
-                and node.name != "main"
-            ):
-                param_keys = set()
-
-                for child in ast.walk(node):
-                    # Match: params.get("key")
-                    if (
-                        isinstance(child, ast.Call)
-                        and isinstance(child.func, ast.Attribute)
-                        and child.func.attr == "get"
-                        and isinstance(child.func.value, ast.Name)
-                        and child.func.value.id == "params"
-                    ):
-                        if child.args and isinstance(child.args[0], ast.Str):
-                            param_keys.add(child.args[0].s)
-
-                    # Match: params["key"]
-                    elif (
-                        isinstance(child, ast.Subscript)
-                        and isinstance(child.value, ast.Name)
-                        and child.value.id == "params"
-                        and isinstance(child.slice, ast.Constant)
-                        and isinstance(child.slice.value, str)
-                    ):
-                        param_keys.add(child.slice.value)
-
-                actions.append({
-                    "action": node.name,
-                    "params": sorted(param_keys)
-                })
-
-        return actions
-
-    extracted = extract_actions_with_params(code)
-    actions = []
-    for act in extracted:
-        actions.append({
-            "tool": module_name,
-            "action": act["action"],
-            "script_path": script_path,
-            "params": act["params"],
-            "example": {
-                "tool_name": module_name,
-                "action": act["action"],
-                "params": {k: f"<{k}>" for k in act["params"]}
+def list_all_tools():
+    """List all registered tools with their unlock status"""
+    registry = load_registry()
+    if "error" in registry:
+        return registry
+    
+    # Get tool headers
+    tools = {}
+    for entry in registry:
+        if entry.get("action") == "__tool__":
+            tool_name = entry.get("tool")
+            tools[tool_name] = {
+                "name": tool_name,
+                "unlocked": entry.get("unlocked", False),
+                "description": entry.get("description", "")
             }
-        })
-
-    settings.extend(actions)
-    save_settings(settings)
-
-    # Special handling for claude_assistant: verify Claude Code auth
-    if module_name == "claude_assistant":
-        import subprocess
-        try:
-            # Test if Claude Code is authenticated
-            test_result = subprocess.run(
-                ["claude", "-p", "echo test"],
-                capture_output=True,
-                timeout=5,
-                text=True
-            )
-            if test_result.returncode != 0:
-                # Not authenticated - show instructions
-                print("")
-                print("=" * 70)
-                print("🔐 CLAUDE CODE AUTHENTICATION REQUIRED")
-                print("=" * 70)
-                print("")
-                print("Autonomous execution needs Claude Code authentication (one-time setup).")
-                print("")
-                print("📋 STEPS:")
-                print("  1. Open Terminal.app (Command+Space, type 'Terminal')")
-                print("  2. Run: claude")
-                print("  3. Type: /login")
-                print("  4. Complete authentication in browser")
-                print("")
-                print("That's it! After this one-time setup, autonomous execution works forever.")
-                print("")
-                print("=" * 70)
-                print("")
-        except FileNotFoundError:
-            print("")
-            print("⚠️  Claude Code not installed.")
-            print("The installer should have installed it via Homebrew.")
-            print("If you see this, the installation may have failed.")
-            print("")
-        except Exception as e:
-            print(f"⚠️ Auth check failed: {e}")
-
+    
     return {
         "status": "success",
-        "message": f"✅ Installed tool '{module_name}' with {len(actions)} actions.",
-        "actions": [a["action"] for a in actions]
+        "tools": list(tools.values())
     }
 
 
-def list_supported_actions(_):
-    data = load_settings()
-    return {"status": "success", "supported_actions": data}
-
-
-def refresh_orchestrate_runtime(_):
-    import os
-    import requests
-    import json
-    import ast
-    from pathlib import Path
-
-    ROOT_DIR = Path(__file__).resolve().parent.parent
-    DATA_DIR = ROOT_DIR / "data"
-    TOOLS_DIR = ROOT_DIR / "tools"
-    SETTINGS_PATH = ROOT_DIR / "system_settings.ndjson"
-
-    BASE_RAW = "https://raw.githubusercontent.com/unmistakablecreative/orchestrate-core-runtime/main/"
-    GITHUB_API_TOOLS = "https://api.github.com/repos/unmistakablecreative/orchestrate-core-runtime/contents/tools"
-
-    results = []
-    updated = 0
-    new_actions = []
-
-    # === Refresh app store and updates ===
-    data_files = {
-        "data/orchestrate_app_store.json": DATA_DIR / "orchestrate_app_store.json",
-        "data/update_messages.json": DATA_DIR / "update_messages.json"
-    }
-
-    for remote_path, local_path in data_files.items():
-        try:
-            url = BASE_RAW + remote_path
-            response = requests.get(url)
-            response.raise_for_status()
-            local_path.parent.mkdir(parents=True, exist_ok=True)
-            local_path.write_text(response.text)
-            results.append(f"✅ Refreshed {remote_path}")
-        except Exception as e:
-            results.append(f"❌ Failed to refresh {remote_path}: {e}")
-
-    # === Load app store metadata ===
-    try:
-        with open(DATA_DIR / "orchestrate_app_store.json", "r") as f:
-            app_store = json.load(f).get("entries", {})
-    except Exception as e:
-        app_store = {}
-        results.append(f"❌ Failed to load app store: {e}")
-
-    # === Ensure credentials.json exists ===
-    creds_path = TOOLS_DIR / "credentials.json"
-    if not creds_path.exists():
-        creds_path.write_text("{}")
-        results.append("🛡️ Created blank credentials.json")
-    else:
-        results.append("⏭️ Skipped credentials.json (already exists)")
-
-    # === Load existing settings
-    if SETTINGS_PATH.exists():
-        with open(SETTINGS_PATH, "r") as f:
-            existing_lines = f.readlines()
-        try:
-            settings = [json.loads(line) for line in existing_lines]
-        except Exception as e:
-            results.append(f"❌ Failed to parse system_settings.ndjson: {e}")
-            settings = []
-    else:
-        settings = []
-
-    existing_keys = {(s["tool"], s["action"]) for s in settings}
-
-    # === Helper: extract function defs ===
-    def extract_actions(path):
-        with open(path, "r") as f:
-            tree = ast.parse(f.read())
-        return [
-            {"action": node.name, "params": [arg.arg for arg in node.args.args if arg.arg != "_"]}
-            for node in tree.body
-            if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
-        ]
-
-    # === Load user unlock status ===
-    try:
-        referrals_path = Path("/container_state/referrals.json")
-        if referrals_path.exists():
-            with open(referrals_path, "r") as f:
-                referrals_data = json.load(f)
-            user_unlocked = referrals_data.get("tools_unlocked", [])
-        else:
-            user_unlocked = []
-    except Exception:
-        user_unlocked = []
-
-    # === Pull and process tool scripts ===
-    try:
-        tool_entries = requests.get(GITHUB_API_TOOLS).json()
-        for entry in tool_entries:
-            name = entry.get("name", "")
-            if not name.endswith(".py") or name == "credentials.json":
-                continue
-
-            tool_name = name.replace(".py", "")
-            is_marketplace = tool_name in app_store
-            is_free = app_store.get(tool_name, {}).get("referral_unlock_cost", 1) == 0
-            is_unlocked = tool_name in user_unlocked
-
-            # ✅ Skip locked marketplace tools that user hasn't unlocked yet
-            if is_marketplace and not is_free and not is_unlocked:
-                results.append(f"⏭️ Skipped locked marketplace tool: {tool_name}")
-                continue
-
-            # ✅ Only download allowed tools
-            try:
-                tool_code = requests.get(entry["download_url"]).text
-                tool_path = TOOLS_DIR / name
-                tool_path.write_text(tool_code)
-                results.append(f"🔁 Updated tool: {name}")
-                updated += 1
-
-                # === Extract + register actions
-                actions = extract_actions(tool_path)
-                for act in actions:
-                    key = (tool_name, act["action"])
-                    if key not in existing_keys:
-                        entry_obj = {
-                            "tool": tool_name,
-                            "action": act["action"],
-                            "script_path": f"tools/{name}",
-                            "params": act["params"]
-                        }
-                        settings.append(entry_obj)
-                        existing_keys.add(key)
-                        new_actions.append(f"{tool_name}.{act['action']}")
-
-            except Exception as e:
-                results.append(f"❌ Failed to process {name}: {e}")
-    except Exception as e:
-        results.append(f"❌ Could not fetch tools list: {e}")
-
-    # === Save merged system_settings.ndjson ===
-    try:
-        with open(SETTINGS_PATH, "w") as f:
-            for entry in settings:
-                f.write(json.dumps(entry) + "\n")
-        results.append(f"✅ Saved merged system_settings.ndjson with {len(settings)} actions")
-    except Exception as e:
-        results.append(f"❌ Failed to write system_settings.ndjson: {e}")
-
-    summary = f"🧩 {updated} tools updated | ➕ {len(new_actions)} new actions registered"
-    results.append(summary)
-
-    return {
-        "status": "complete" if updated or new_actions else "noop",
-        "messages": results
-    }
-
-
-def register_engine(params):
-    """
-    Register a new background engine script to engine_registry.json
-    so it gets launched automatically on server startup.
-    Accepts: {"engine_path": "filename.py"}
-    """
-    import os, json
-    path = "data/engine_registry.json"
-    engine_path = params.get("engine_path")
-
-    if not engine_path:
-        return {"status": "error", "message": "❌ Missing 'engine_path' in params."}
-
-    if not os.path.exists(path):
-        engines = {"engines": [engine_path]}
-    else:
-        with open(path, "r", encoding="utf-8") as f:
-            engines = json.load(f)
-        if engine_path not in engines.get("engines", []):
-            engines["engines"].append(engine_path)
-
-    with open(path, "w", encoding="utf-8") as f:
-        json.dump(engines, f, indent=2)
-
-    return {"status": "success", "message": f"✅ Engine '{engine_path}' registered."}
-
-
-def update_action(params):
-    tool = params.get("tool")
-    action = params.get("action")
-    if not tool or not action:
-        return {"status": "error", "message": "Missing 'tool' or 'action'"}
-
-    data = load_settings()
+def mark_tool_unlocked(tool_name):
+    """Mark a tool as unlocked in the registry"""
+    registry = load_registry()
+    if "error" in registry:
+        return registry
+    
+    # Find tool header and mark as unlocked
     updated = False
-
-    for entry in data:
-        if entry.get("tool") == tool and entry.get("action") == action:
-            for k, v in params.items():
-                if k not in ["tool", "action"]:
-                    entry[k] = v
+    for entry in registry:
+        if entry.get("tool") == tool_name and entry.get("action") == "__tool__":
+            entry["unlocked"] = True
             updated = True
             break
-
+    
     if not updated:
-        return {"status": "error", "message": f"Action '{action}' not found for tool '{tool}'"}
-
-    save_settings(data)
-    return {
-        "status": "success",
-        "message": f"Action '{action}' for tool '{tool}' updated."
-    }
-
-
-def update_custom_instructions(params):
-    """
-    Update custom_instructions.json with clean nested updates.
-    Perfect for modifying commands, addendums, instructions, etc.
-    """
-    import os
-    import json
+        return {"error": f"Tool {tool_name} not found in registry"}
     
-    path = "data/custom_instructions.json"
-    updates = params.get("content", {})
+    save_result = save_registry(registry)
+    if "error" in save_result:
+        return save_result
     
+    return {"status": "success", "tool": tool_name}
+
+
+def refresh_runtime():
+    """
+    Pull latest updates from repo while preserving user data
+    
+    Protected items:
+    - data/ directory (credentials, queues, all user data)
+    - container_state/ (system identity, referrals)
+    - User's unlock status in registry
+    
+    Updated items:
+    - orchestrate_app_store.json (new tools appear)
+    - Tool scripts (bug fixes, improvements)
+    - System messages (update_messages.json)
+    - New actions for existing tools
+    """
     try:
-        with open(path, "r") as f:
-            existing = json.load(f)
-    except FileNotFoundError:
-        existing = {"commands": {}}
-    
-    def deep_merge(target, source):
-        """Recursively merge source into target, preserving existing structure"""
-        for key, value in source.items():
-            if isinstance(value, dict) and key in target and isinstance(target[key], dict):
-                deep_merge(target[key], value)
-            else:
-                target[key] = value
-    
-    # Merge the updates into existing structure
-    deep_merge(existing, updates)
-    
-    # Write back to file
-    with open(path, "w") as f:
-        json.dump(existing, f, indent=2)
-    
-    return {
-        "status": "success", 
-        "message": f"✅ Updated custom_instructions.json",
-        "structure": "nested"
-    }
-
-
-
-def add_to_memory(params):
-    """
-    Adds or updates a memory entry in data/working_memory.json.
-    Accepts a params dict with 'entry_key' and 'entry_data'.
-    """
-    import os, json
-    path = "data/working_memory.json"
-
-    entry_key = params["entry_key"]
-    entry_data = params["entry_data"]
-
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            memory = json.load(f)
-    else:
-        memory = {}
-
-    memory[entry_key] = entry_data
-
-    with open(path, "w") as f:
-        json.dump(memory, f, indent=2)
-
-    return {"status": "success", "message": f"Entry '{entry_key}' added to memory."}
-
-
-def get_working_memory(params):
-    """
-    Returns the full contents of data/working_memory.json.
-    Accepts an unused params dict for tool compatibility.
-    """
-    import os, json
-    path = "data/working_memory.json"
-
-    if not os.path.exists(path):
-        return {"status": "success", "memory": {}}
-
-    with open(path, "r") as f:
-        memory = json.load(f)
-
-    return {"status": "success", "memory": memory}
-
-
-def clear_memory(params):
-    """
-    Clears all entries in data/working_memory.json by resetting to an empty dict.
-    Accepts a dummy params dict for compatibility.
-    """
-    import json
-    path = "data/working_memory.json"
-
-    with open(path, "w") as f:
-        json.dump({}, f, indent=2)
-
-    return {"status": "success", "message": "Working memory cleared."}
-
-def activate_intent(params):
-    import os
-    import json
-    import time
-    
-    intent_key = params.get("intent_key")
-    if not intent_key:
-        return {"status": "error", "message": "Missing 'intent_key'"}
-    
-    registry_path = os.path.join(ROOT_DIR, "data", "intent_registry.json")
-    if not os.path.exists(registry_path):
-        return {"status": "error", "message": "Intent registry not found"}
-    
-    with open(registry_path, "r") as f:
-        registry = json.load(f)
-    
-    if intent_key not in registry:
-        return {
-            "status": "error", 
-            "message": f"Intent '{intent_key}' not found",
-            "available_intents": list(registry.keys())
-        }
-    
-    intent_config = registry[intent_key]
-    
-    thread_intent = {
-        "active": True,
-        "intent": intent_key,
-        "allowed_tools": intent_config["allowed_tools"],
-        "description": intent_config["description"],
-        "started_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "violations_count": 0
-    }
-    
-    intent_path = os.path.join(ROOT_DIR, "data", "thread_intent.json")
-    os.makedirs(os.path.dirname(intent_path), exist_ok=True)
-    with open(intent_path, "w") as f:
-        json.dump(thread_intent, f, indent=2)
-    
-    return {
-        "status": "success",
-        "intent": intent_key,
-        "allowed_tools": intent_config["allowed_tools"],
-        "message": f"✅ Intent '{intent_key}' activated. Tool access restricted."
-    }
-
-
-def deactivate_intent(params):
-    import os
-    import json
-    import time
-    
-    thread_intent = {
-        "active": False,
-        "intent": "free_work",
-        "allowed_tools": "*",
-        "description": "No restrictions",
-        "deactivated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "violations_count": 0
-    }
-    
-    intent_path = os.path.join(ROOT_DIR, "data", "thread_intent.json")
-    with open(intent_path, "w") as f:
-        json.dump(thread_intent, f, indent=2)
-    
-    return {
-        "status": "success",
-        "message": "✅ Intent lock deactivated. All tools available."
-    }
-
-
-def get_active_intent(params):
-    import os
-    import json
-    
-    intent_path = os.path.join(ROOT_DIR, "data", "thread_intent.json")
-    
-    if not os.path.exists(intent_path):
+        # Save current user state before pulling
+        referral_path = os.path.join(BASE_DIR, "container_state", "referrals.json")
+        unlocked_tools = set()
+        user_credits = 0
+        
+        if os.path.exists(referral_path):
+            with open(referral_path, 'r') as f:
+                referral_data = json.load(f)
+                unlocked_tools = set(referral_data.get("tools_unlocked", []))
+                user_credits = referral_data.get("referral_credits", 0)
+        
+        # Pull latest changes from repo
+        result = subprocess.run(
+            ["git", "-C", BASE_DIR, "pull"],
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            return {
+                "error": "Git pull failed",
+                "details": result.stderr
+            }
+        
+        # Restore user's unlock status in registry
+        registry = load_registry()
+        if "error" not in registry:
+            for entry in registry:
+                tool_name = entry.get("tool")
+                if entry.get("action") == "__tool__" and tool_name in unlocked_tools:
+                    entry["unlocked"] = True
+            
+            save_registry(registry)
+        
+        # Force refresh of update_messages.json from repo
+        repo_messages = os.path.join(BASE_DIR, "data", "update_messages.json")
+        git_messages = os.path.join(BASE_DIR, ".git", "..", "data", "update_messages.json")
+        
+        if os.path.exists(git_messages):
+            shutil.copy(git_messages, repo_messages)
+        
         return {
             "status": "success",
-            "active": False,
-            "intent": "free_work",
-            "message": "No active intent lock"
+            "message": "Runtime refreshed successfully",
+            "git_output": result.stdout.strip(),
+            "tools_preserved": list(unlocked_tools),
+            "credits_preserved": user_credits
         }
+        
+    except subprocess.TimeoutExpired:
+        return {"error": "Git pull timed out"}
+    except Exception as e:
+        return {"error": f"Runtime refresh failed: {e}"}
+
+
+# Action registry for execution_hub
+ACTIONS = {
+    "register_tool_from_script": register_tool_from_script,
+    "get_tool_actions": get_tool_actions,
+    "list_all_tools": list_all_tools,
+    "mark_tool_unlocked": mark_tool_unlocked,
+    "refresh_runtime": refresh_runtime
+}
+
+
+def execute_action(action, params):
+    """Execute system_settings action"""
+    if action not in ACTIONS:
+        return {"error": f"Unknown action: {action}"}
     
-    with open(intent_path, "r") as f:
-        intent = json.load(f)
-    
-    return {
-        "status": "success",
-        **intent
-    }
-
-
-def list_available_intents(params):
-    import os
-    import json
-    
-    registry_path = os.path.join(ROOT_DIR, "data", "intent_registry.json")
-    
-    if not os.path.exists(registry_path):
-        return {"status": "error", "message": "Intent registry not found"}
-    
-    with open(registry_path, "r") as f:
-        registry = json.load(f)
-    
-    return {
-        "status": "success",
-        "intents": registry,
-        "count": len(registry)
-    }
-
-# === Dispatcher Functions (Phase 1 Refactor) ===
-
-def manage_tool(params):
-    """
-    Unified tool management dispatcher.
-    Operations: add, remove, list
-    """
-    operation = params.get("operation")
-
-    if operation == "add":
-        return add_tool(params)
-    elif operation == "remove":
-        return remove_tool(params)
-    elif operation == "list":
-        return list_tools(params)
-    else:
-        return {
-            "status": "error",
-            "message": f"Invalid operation: {operation}. Valid operations: add, remove, list"
-        }
-
-def manage_action(params):
-    """
-    Unified action management dispatcher.
-    Operations: add, remove, list, update
-    """
-    operation = params.get("operation")
-
-    if operation == "add":
-        return add_action(params)
-    elif operation == "remove":
-        return remove_action(params)
-    elif operation == "list":
-        return list_actions(params)
-    elif operation == "update":
-        return update_action(params)
-    else:
-        return {
-            "status": "error",
-            "message": f"Invalid operation: {operation}. Valid operations: add, remove, list, update"
-        }
-
-def manage_dashboard(params):
-    """
-    Unified dashboard management dispatcher.
-    Operations: add, remove, update, reorder, list, toggle
-    """
-    operation = params.get("operation")
-
-    if operation == "add":
-        return add_dashboard_item(params)
-    elif operation == "remove":
-        return remove_dashboard_item(params)
-    elif operation == "update":
-        return update_dashboard_item(params)
-    elif operation == "reorder":
-        return reorder_dashboard(params)
-    elif operation == "list":
-        return list_dashboard_items(params)
-    elif operation == "toggle":
-        return toggle_dashboard_item(params)
-    else:
-        return {
-            "status": "error",
-            "message": f"Invalid operation: {operation}. Valid operations: add, remove, update, reorder, list, toggle"
-        }
-
-def manage_intent(params):
-    """
-    Unified intent management dispatcher.
-    Operations: activate, deactivate, get_active, list
-    """
-    operation = params.get("operation")
-
-    if operation == "activate":
-        return activate_intent(params)
-    elif operation == "deactivate":
-        return deactivate_intent(params)
-    elif operation == "get_active":
-        return get_active_intent(params)
-    elif operation == "list":
-        return list_available_intents(params)
-    else:
-        return {
-            "status": "error",
-            "message": f"Invalid operation: {operation}. Valid operations: activate, deactivate, get_active, list"
-        }
-
-def manage_memory(params):
-    """
-    Unified memory management dispatcher.
-    Operations: add, remove, list, clear
-    """
-    operation = params.get("operation")
-
-    if operation == "add":
-        return add_memory_file(params)
-    elif operation == "remove":
-        return remove_memory_file(params)
-    elif operation == "list":
-        return list_memory_files(params)
-    elif operation == "clear":
-        return clear_memory(params)
-    else:
-        return {
-            "status": "error",
-            "message": f"Invalid operation: {operation}. Valid operations: add, remove, list, clear"
-        }
-
-def main():
-    import argparse, json
-    parser = argparse.ArgumentParser()
-    parser.add_argument('action')
-    parser.add_argument('--params')
-    args = parser.parse_args()
-    params = json.loads(args.params) if args.params else {}
-
-    if args.action == 'set_credential':
-        result = set_credential(params)
-    elif args.action == 'load_credential':
-        result = load_credential(params)
-    elif args.action == 'add_tool':
-        result = add_tool(params)
-    elif args.action == 'remove_tool':
-        result = remove_tool(params)
-    elif args.action == 'list_tools':
-        result = list_tools(params)
-    elif args.action == 'add_action':
-        result = add_action(params)
-    elif args.action == 'remove_action':
-        result = remove_action(params)
-    elif args.action == 'list_actions':
-        result = list_actions(params)
-    elif args.action == 'add_memory_file':
-        result = add_memory_file(params)
-    elif args.action == 'remove_memory_file':
-        result = remove_memory_file(params)
-    elif args.action == 'list_memory_files':
-        result = list_memory_files(params)
-    elif args.action == 'build_working_memory':
-        result = build_working_memory(params)
-    elif args.action == 'list_supported_actions':
-        result = list_supported_actions(params)
-    elif args.action == 'refresh_orchestrate_runtime':
-        result = refresh_orchestrate_runtime(params)
-    elif args.action == 'install_tool':
-        result = install_tool(params)
-    elif args.action == 'register_engine':
-        result = register_engine(params)
-    elif args.action == 'update_action':
-        result = update_action(params)
-    elif args.action == 'update_custom_instructions':
-        result = update_custom_instructions(params)
-    elif args.action == 'add_dashboard_item':
-        result = add_dashboard_item(params)
-    elif args.action == 'remove_dashboard_item':
-        result = remove_dashboard_item(params)
-    elif args.action == 'update_dashboard_item':
-        result = update_dashboard_item(params)
-    elif args.action == 'reorder_dashboard':
-        result = reorder_dashboard(params)
-    elif args.action == 'list_dashboard_items':
-        result = list_dashboard_items(params)
-    elif args.action == 'toggle_dashboard_item':
-        result = toggle_dashboard_item(params)
-    elif args.action == 'add_to_memory':
-        result = add_to_memory(params)
-    elif args.action == 'get_working_memory':
-        result = get_working_memory(params)
-    elif args.action == 'clear_memory':
-        result = clear_memory(params)
-    elif args.action == 'activate_intent':
-        result = activate_intent(params)
-    elif args.action == 'deactivate_intent':
-        result = deactivate_intent(params)
-    elif args.action == 'get_active_intent':
-        result = get_active_intent(params)
-    elif args.action == 'list_available_intents':
-        result = list_available_intents(params)
-    elif args.action == 'manage_tool':
-        result = manage_tool(params)
-    elif args.action == 'manage_action':
-        result = manage_action(params)
-    elif args.action == 'manage_dashboard':
-        result = manage_dashboard(params)
-    elif args.action == 'manage_intent':
-        result = manage_intent(params)
-    elif args.action == 'manage_memory':
-        result = manage_memory(params)
-    else:
-        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
-
-    print(json.dumps(result, indent=2))
+    try:
+        return ACTIONS[action](**params)
+    except Exception as e:
+        return {"error": f"Action execution failed: {e}"}
 
 
 if __name__ == "__main__":
-    main()
+    # CLI usage
+    if len(sys.argv) < 2:
+        print("Usage: system_settings.py <action> [params...]")
+        print("Actions: register_tool_from_script, get_tool_actions, list_all_tools, refresh_runtime")
+        sys.exit(1)
+    
+    action = sys.argv[1]
+    
+    if action == "register_tool_from_script":
+        if len(sys.argv) < 3:
+            print("Usage: system_settings.py register_tool_from_script <tool_name>")
+            sys.exit(1)
+        result = register_tool_from_script(sys.argv[2])
+        print(json.dumps(result, indent=2))
+    
+    elif action == "get_tool_actions":
+        if len(sys.argv) < 3:
+            print("Usage: system_settings.py get_tool_actions <tool_name>")
+            sys.exit(1)
+        result = get_tool_actions(sys.argv[2])
+        print(json.dumps(result, indent=2))
+    
+    elif action == "list_all_tools":
+        result = list_all_tools()
+        print(json.dumps(result, indent=2))
+    
+    elif action == "refresh_runtime":
+        result = refresh_runtime()
+        print(json.dumps(result, indent=2))
+    
+    else:
+        print(f"Unknown action: {action}")
+        sys.exit(1)
