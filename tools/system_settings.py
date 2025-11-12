@@ -737,6 +737,18 @@ def refresh_orchestrate_runtime(_):
             if isinstance(node, ast.FunctionDef) and not node.name.startswith("_")
         ]
 
+    # === Load user unlock status ===
+    try:
+        referrals_path = Path("/container_state/referrals.json")
+        if referrals_path.exists():
+            with open(referrals_path, "r") as f:
+                referrals_data = json.load(f)
+            user_unlocked = referrals_data.get("tools_unlocked", [])
+        else:
+            user_unlocked = []
+    except Exception:
+        user_unlocked = []
+
     # === Pull and process tool scripts ===
     try:
         tool_entries = requests.get(GITHUB_API_TOOLS).json()
@@ -748,9 +760,10 @@ def refresh_orchestrate_runtime(_):
             tool_name = name.replace(".py", "")
             is_marketplace = tool_name in app_store
             is_free = app_store.get(tool_name, {}).get("referral_unlock_cost", 1) == 0
+            is_unlocked = tool_name in user_unlocked
 
-            # ✅ Skip locked marketplace tools (don't even download them)
-            if is_marketplace and not is_free:
+            # ✅ Skip locked marketplace tools that user hasn't unlocked yet
+            if is_marketplace and not is_free and not is_unlocked:
                 results.append(f"⏭️ Skipped locked marketplace tool: {tool_name}")
                 continue
 
