@@ -48,7 +48,7 @@
       "requires_credentials": false,
       "requires_subscription": true,
       "subscription_type": "Claude Pro or Team",
-      "setup_script": "auth/claude_setup.sh",
+      "setup_script": "setup_claude_auth.sh",
       "unlock_message": "✅ Claude Assistant unlocked!\n\n🔐 AUTHENTICATION REQUIRED:\nRun this command to authenticate with your Claude subscription:\n\nbash auth/claude_setup.sh\n\nThis will open your browser for one-time authentication.\nAfter authentication, you can assign tasks and Claude will execute them autonomously in the background.\n\n💡 Example task: curl -X POST http://localhost:8000/execute_task -H 'Content-Type: application/json' -d '{\"tool_name\":\"claude_assistant\",\"action\":\"assign_task\",\"params\":{\"task_id\":\"test_001\",\"description\":\"Create a hello world script\"}}'",
       "post_unlock_nudge": "💡 Power user tip: Claude Assistant works great with outline_editor for autonomous documentation workflows"
     }
