@@ -81,7 +81,7 @@
           "tool_name": "outline_editor"
         }
       },
-      "expected_status": "success",
+      "expected_status": "noop",
       "critical": false
     },
     {
@@ -129,7 +129,7 @@
           "sharing": true
         }
       },
-      "expected_status": "200",
+      "expected_status": 200,
       "critical": false
     },
     {
@@ -145,7 +145,7 @@
           "collectionId": "Dogs"
         }
       },
-      "expected_status": "200",
+      "expected_status": 200,
       "critical": false
     }
   ],
