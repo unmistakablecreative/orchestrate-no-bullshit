@@ -19,8 +19,8 @@ from datetime import datetime
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.dirname(BASE_DIR)
 APP_STORE_PATH = os.path.join(RUNTIME_DIR, "data", "orchestrate_app_store.json")
-REFERRAL_PATH = "/container_state/referrals.json"
-IDENTITY_PATH = "/container_state/system_identity.json"
+REFERRAL_PATH = os.path.join(RUNTIME_DIR, "data", "referrals.json")
+IDENTITY_PATH = os.path.join(RUNTIME_DIR, "data", "system_identity.json")
 SYSTEM_REGISTRY = os.path.join(RUNTIME_DIR, "system_settings.ndjson")
 
 # JSONBin config
