@@ -17,10 +17,11 @@ import requests
 from datetime import datetime
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-APP_STORE_PATH = os.path.join(BASE_DIR, "orchestrate_app_store.json")
-REFERRAL_PATH = os.path.join(BASE_DIR, "container_state", "referrals.json")
-IDENTITY_PATH = os.path.join(BASE_DIR, "container_state", "system_identity.json")
-SYSTEM_REGISTRY = os.path.join(BASE_DIR, "system_settings.ndjson")
+RUNTIME_DIR = os.path.dirname(BASE_DIR)
+APP_STORE_PATH = os.path.join(RUNTIME_DIR, "data", "orchestrate_app_store.json")
+REFERRAL_PATH = "/container_state/referrals.json"
+IDENTITY_PATH = "/container_state/system_identity.json"
+SYSTEM_REGISTRY = os.path.join(RUNTIME_DIR, "system_settings.ndjson")
 
 # JSONBin config
 JSONBIN_ID = "68292fcf8561e97a50162139"
@@ -238,7 +239,7 @@ def wait_for_authentication(timeout=300, poll_interval=5):
 def run_setup_script(script_path):
     """Execute tool setup script (e.g., OAuth flow)"""
     try:
-        mounted_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
+        mounted_path = os.path.join("/orchestrate_user", script_path)
         container_path = os.path.join(BASE_DIR, script_path)
 
         if os.path.exists(mounted_path):
