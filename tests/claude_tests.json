@@ -1,0 +1,197 @@
+{
+  "test_suite": "Claude Assistant Tool Validation",
+  "description": "Comprehensive test suite for claude_assistant.py actions",
+  "ngrok_url": "https://supposedly-faithful-termite.ngrok-free.app",
+  "tests": [
+    {
+      "name": "get_all_results",
+      "description": "Test retrieving all task results (baseline check)",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "get_all_results",
+        "params": {}
+      },
+      "expected_status": "success",
+      "critical": true
+    },
+    {
+      "name": "get_working_memory",
+      "description": "Test retrieving working memory",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "get_working_memory",
+        "params": {}
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "add_to_memory",
+      "description": "Test adding to working memory",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "add_to_memory",
+        "params": {
+          "key": "docker_test_timestamp",
+          "value": "2025-11-12",
+          "type": "test"
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "assign_task",
+      "description": "Test task assignment to Claude queue",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "assign_task",
+        "params": {
+          "task_id": "docker_test_task_20251112",
+          "description": "Docker installation validation test task",
+          "priority": "low"
+        }
+      },
+      "expected_status": "success",
+      "critical": true
+    },
+    {
+      "name": "check_task_status",
+      "description": "Test checking status of assigned task",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "check_task_status",
+        "params": {
+          "task_id": "docker_test_task_20251112"
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "process_queue",
+      "description": "Test fetching queued tasks (should see our test task)",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "process_queue",
+        "params": {}
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "batch_assign_tasks",
+      "description": "Test batch task assignment",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "batch_assign_tasks",
+        "params": {
+          "tasks": [
+            {
+              "task_id": "docker_batch_test_001",
+              "description": "First batch test task",
+              "priority": "low"
+            },
+            {
+              "task_id": "docker_batch_test_002",
+              "description": "Second batch test task",
+              "priority": "low"
+            }
+          ]
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "get_recent_tasks",
+      "description": "Test getting recent completed tasks",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "get_recent_tasks",
+        "params": {
+          "limit": 5
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "ask_claude",
+      "description": "Test quick Q&A with Claude",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "ask_claude",
+        "params": {
+          "question": "What is the status of docker_test_task_20251112?"
+        }
+      },
+      "expected_status": "ready",
+      "critical": false
+    },
+    {
+      "name": "cancel_task",
+      "description": "Test task cancellation",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "cancel_task",
+        "params": {
+          "task_id": "docker_test_task_20251112"
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "cancel_batch_task_1",
+      "description": "Cleanup: cancel batch test task 1",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "cancel_task",
+        "params": {
+          "task_id": "docker_batch_test_001"
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "cancel_batch_task_2",
+      "description": "Cleanup: cancel batch test task 2",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "cancel_task",
+        "params": {
+          "task_id": "docker_batch_test_002"
+        }
+      },
+      "expected_status": "success",
+      "critical": false
+    },
+    {
+      "name": "clear_working_memory",
+      "description": "Cleanup: clear test data from working memory",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "clear_working_memory",
+        "params": {}
+      },
+      "expected_status": "success",
+      "critical": false
+    }
+  ],
+  "cleanup": []
+}

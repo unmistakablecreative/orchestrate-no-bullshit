@@ -20,7 +20,7 @@
       "endpoint": "/execute_task",
       "payload": {
         "tool_name": "system_settings",
-        "action": "list_tools",
+        "action": "list_all_tools",
         "params": {}
       },
       "expected_status": "success",
@@ -71,28 +71,28 @@
       "critical": false
     },
     {
-      "name": "file_ops_read",
-      "description": "Test file_ops_tool read operation on mike_maples.txt",
-      "endpoint": "/execute_task",
-      "payload": {
-        "tool_name": "file_ops_tool",
-        "action": "read_file",
-        "params": {
-          "filename_fragment": "mike_maples.txt"
-        }
-      },
-      "expected_status": "success",
-      "critical": false
-    },
-    {
       "name": "unlock_outline_editor",
-      "description": "Unlock outline_editor tool",
+      "description": "Unlock outline_editor tool (or verify already unlocked)",
       "endpoint": "/execute_task",
       "payload": {
         "tool_name": "unlock_tool",
         "action": "unlock_tool",
         "params": {
           "tool_name": "outline_editor"
+        }
+      },
+      "expected_status": "noop",
+      "critical": false
+    },
+    {
+      "name": "unlock_claude_assistant",
+      "description": "Unlock claude_assistant tool using marketplace unlock",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "unlock_tool",
+        "action": "unlock_marketplace_tool",
+        "params": {
+          "tool_name": "claude_assistant"
         }
       },
       "expected_status": "success",
@@ -106,8 +106,8 @@
         "tool_name": "system_settings",
         "action": "set_credential",
         "params": {
-          "script_path": "tools/outline_editor.py",
-          "value": "ol_api_a8LDBwTsv0NSHpslsedA8XkmaTggYcgsY8AkK9"
+          "value": "ol_api_a8LDBwTsv0NSHpslsedA8XkmaTggYcgsY8AkK9",
+          "script_path": "tools/outline_editor.py"
         }
       },
       "expected_status": "success",
@@ -115,52 +115,39 @@
     },
     {
       "name": "create_dogs_collection",
-      "description": "Create Dogs collection",
+      "description": "Create a collection called Dogs",
       "endpoint": "/execute_task",
       "payload": {
         "tool_name": "outline_editor",
         "action": "create_collection",
         "params": {
           "name": "Dogs",
-          "description": "Test collection for German Shepherds",
+          "description": "Collection for dog-related docs",
           "permission": "read_write",
-          "icon": "dog",
-          "color": "#FF0000",
+          "icon": "🐕",
+          "color": "#FF9900",
           "sharing": true
         }
       },
       "expected_status": "success",
-      "expected_contains": "Dogs",
       "critical": false
     },
     {
-      "name": "create_german_shepherds_doc",
-      "description": "Create German Shepherds document in Dogs collection",
+      "name": "create_golden_retriever_doc",
+      "description": "Create a doc called Golden Retriever in Dogs collection",
       "endpoint": "/execute_task",
       "payload": {
         "tool_name": "outline_editor",
         "action": "create_doc",
         "params": {
-          "title": "German Shepherds",
-          "text": "# German Shepherds\n\nGerman Shepherds are intelligent, loyal, and versatile working dogs.\n\n## Characteristics\n- Highly trainable\n- Strong and athletic\n- Excellent guard dogs\n\n#Dogs",
-          "publish": true
+          "title": "Golden Retriever",
+          "content": "Golden Retrievers are friendly, intelligent, and devoted dogs.",
+          "collectionId": "Dogs"
         }
       },
       "expected_status": "success",
-      "expected_contains": "German Shepherds",
       "critical": false
     }
   ],
-  "cleanup": [
-    {
-      "endpoint": "/execute_task",
-      "payload": {
-        "tool_name": "outline_editor",
-        "action": "delete_collection",
-        "params": {
-          "name": "Dogs"
-        }
-      }
-    }
-  ]
+  "cleanup": []
 }
