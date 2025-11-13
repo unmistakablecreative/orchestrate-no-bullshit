@@ -72,7 +72,7 @@
     },
     {
       "name": "unlock_outline_editor",
-      "description": "Unlock outline_editor tool (or verify already unlocked)",
+      "description": "Unlock outline_editor tool (pre-installed, just marks unlocked)",
       "endpoint": "/execute_task",
       "payload": {
         "tool_name": "unlock_tool",
@@ -82,20 +82,6 @@
         }
       },
       "expected_status": "noop",
-      "critical": false
-    },
-    {
-      "name": "unlock_claude_assistant",
-      "description": "Unlock claude_assistant tool using marketplace unlock",
-      "endpoint": "/execute_task",
-      "payload": {
-        "tool_name": "unlock_tool",
-        "action": "unlock_marketplace_tool",
-        "params": {
-          "tool_name": "claude_assistant"
-        }
-      },
-      "expected_status": "success",
       "critical": false
     },
     {
@@ -147,7 +133,76 @@
       },
       "expected_status": 200,
       "critical": false
+    },
+    {
+      "name": "unlock_claude_assistant",
+      "description": "Unlock claude_assistant (triggers OAuth, auto-waits for auth completion)",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "unlock_tool",
+        "action": "unlock_tool",
+        "params": {
+          "tool_name": "claude_assistant"
+        }
+      },
+      "expected_status": "noop",
+      "critical": true
+    },
+    {
+      "name": "verify_claude_actions_registered",
+      "description": "Verify claude_assistant actions are now available in system",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "system_settings",
+        "action": "list_supported_actions",
+        "params": {}
+      },
+      "expected_status": "success",
+      "expected_contains": "claude_assistant",
+      "critical": true
+    },
+    {
+      "name": "test_autonomous_execution",
+      "description": "Test autonomous task execution via Claude assistant",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "assign_task",
+        "params": {
+          "task_id": "docker_install_test_exec",
+          "description": "Create a text file at data/autonomous_execution_confirmed.txt with content: 'Docker installation test passed - autonomous execution verified at [current timestamp]'",
+          "priority": "high"
+        }
+      },
+      "expected_status": "success",
+      "critical": true
+    },
+    {
+      "name": "verify_autonomous_execution",
+      "description": "Check that Claude task was created and has status",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "check_task_status",
+        "params": {
+          "task_id": "docker_install_test_exec"
+        }
+      },
+      "expected_status": "success",
+      "expected_contains": "task_status",
+      "critical": true
     }
   ],
-  "cleanup": []
+  "cleanup": [
+    {
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "cancel_task",
+        "params": {
+          "task_id": "docker_install_test_exec"
+        }
+      }
+    }
+  ]
 }
