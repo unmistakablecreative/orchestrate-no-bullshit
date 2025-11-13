@@ -20,7 +20,7 @@
       "endpoint": "/execute_task",
       "payload": {
         "tool_name": "system_settings",
-        "action": "list_all_tools",
+        "action": "list_tools",
         "params": {}
       },
       "expected_status": "success",
@@ -81,7 +81,7 @@
           "tool_name": "outline_editor"
         }
       },
-      "expected_status": "noop",
+      "expected_status": "success",
       "critical": false
     },
     {
@@ -129,7 +129,7 @@
           "sharing": true
         }
       },
-      "expected_status": "success",
+      "expected_status": "200",
       "critical": false
     },
     {
@@ -145,7 +145,7 @@
           "collectionId": "Dogs"
         }
       },
-      "expected_status": "success",
+      "expected_status": "200",
       "critical": false
     }
   ],

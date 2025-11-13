@@ -23,8 +23,8 @@ RUN pip install --no-cache-dir \
     astor oauthlib requests-oauthlib pdfplumber python-docx \
     pandas lxml
 
-# Install Claude Code CLI
-RUN curl -fsSL https://claude.ai/install.sh | bash
+# Create orchestrate user (UID 1000) with home directory
+RUN useradd -u 1000 -m -s /bin/bash orchestrate
 
 # Create working dir
 RUN mkdir -p /opt/orchestrate-core-runtime
@@ -32,6 +32,15 @@ WORKDIR /opt/orchestrate-core-runtime
 
 # Copy all files from repo into container
 COPY . /opt/orchestrate-core-runtime/
+
+# Set ownership to orchestrate user
+RUN chown -R orchestrate:orchestrate /opt/orchestrate-core-runtime
+
+# Switch to non-root user
+USER orchestrate
+
+# Install Claude Code CLI as non-root user
+RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Entry handled externally
 ENTRYPOINT ["/bin/bash", "/opt/orchestrate-core-runtime/entrypoint.sh"]

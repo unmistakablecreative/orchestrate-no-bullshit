@@ -155,6 +155,75 @@ class TestRunner:
         print(f"{Colors.RED}Critical Fails: {critical_failed}{Colors.END}")
         print(f"Duration:       {duration:.2f}s")
 
+    def verify_claude_auth(self) -> Dict[str, Any]:
+        """Verify Claude Code authentication in Docker container"""
+        print(f"\n{Colors.BLUE}▶ Verifying Claude Code authentication...{Colors.END}")
+
+        result = {
+            'status': 'FAIL',
+            'message': '',
+            'authenticated': False
+        }
+
+        try:
+            # Check if Claude is authenticated via docker exec
+            url = f"{self.ngrok_url}/execute_task"
+            payload = {
+                "tool_name": "unlock_tool",
+                "action": "check_claude_auth",
+                "params": {}
+            }
+
+            response = requests.post(
+                url,
+                json=payload,
+                headers={'Content-Type': 'application/json'},
+                timeout=10
+            )
+
+            response_data = response.json()
+
+            if response_data.get('status') == 'success' and response_data.get('authenticated'):
+                result['status'] = 'PASS'
+                result['authenticated'] = True
+                result['message'] = "Claude Code is authenticated"
+                print(f"  {Colors.GREEN}✓ Claude Code authenticated{Colors.END}")
+            else:
+                result['message'] = "Claude Code not authenticated"
+                print(f"  {Colors.RED}✗ Claude Code not authenticated{Colors.END}")
+
+        except Exception as e:
+            result['message'] = f"Auth check failed: {str(e)}"
+            print(f"  {Colors.RED}✗ {result['message']}{Colors.END}")
+
+        return result
+
+    def run_claude_tests(self) -> List[Dict[str, Any]]:
+        """Run Claude assistant test suite from claude_tests.json"""
+        print(f"\n{Colors.BOLD}Running Claude Assistant Tests{Colors.END}")
+
+        claude_results = []
+
+        try:
+            # Load claude_tests.json
+            with open('tests/claude_tests.json', 'r') as f:
+                claude_test_config = json.load(f)
+
+            tests = claude_test_config.get('tests', [])
+            print(f"  Found {len(tests)} Claude tests")
+
+            # Run each test
+            for test in tests:
+                result = self.run_test(test)
+                claude_results.append(result)
+
+        except FileNotFoundError:
+            print(f"{Colors.RED}✗ claude_tests.json not found{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}✗ Failed to run Claude tests: {e}{Colors.END}")
+
+        return claude_results
+
         # Detailed failures
         if failed > 0:
             print(f"\n{Colors.RED}Failed Tests:{Colors.END}")

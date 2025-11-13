@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Unlock Tool - Data-Driven Version
+Unlock Tool - Unified Version
 
-Handles unlocking of App Store tools through referral credits.
-All tool-specific behavior (costs, messages, setup) defined in orchestrate_app_store.json.
+Handles unlocking of both:
+1. Pre-installed tools (already in system_settings.ndjson, just need to be marked unlocked)
+2. Marketplace tools (in orchestrate_app_store.json, need to be registered)
 
-Zero hardcoded tool logic - pure config-driven execution.
+Single action intelligently routes based on where tool is found.
 """
 
 import os
@@ -33,7 +34,27 @@ def load_app_store():
             data = json.load(f)
             return data.get("entries", {})
     except Exception as e:
-        return {"error": f"Failed to load app store: {e}"}
+        return {}
+
+
+def load_registry():
+    """Load system_settings.ndjson"""
+    try:
+        with open(SYSTEM_REGISTRY, 'r') as f:
+            return [json.loads(line.strip()) for line in f if line.strip()]
+    except Exception as e:
+        return []
+
+
+def save_registry(entries):
+    """Save system_settings.ndjson"""
+    try:
+        with open(SYSTEM_REGISTRY, 'w') as f:
+            for entry in entries:
+                f.write(json.dumps(entry) + '\n')
+        return {"status": "success"}
+    except Exception as e:
+        return {"error": f"Failed to save registry: {e}"}
 
 
 def load_local_ledger():
@@ -68,7 +89,6 @@ def get_user_id():
 def sync_to_jsonbin(user_id, ledger):
     """Sync local ledger to JSONBin cloud"""
     try:
-        # Fetch current JSONBin state
         response = requests.get(
             f"https://api.jsonbin.io/v3/b/{JSONBIN_ID}/latest",
             headers={"X-Master-Key": JSONBIN_KEY}
@@ -80,10 +100,8 @@ def sync_to_jsonbin(user_id, ledger):
         full_ledger = response.json().get("record", {})
         installs = full_ledger.get("installs", {})
         
-        # Update user's entry
         installs[user_id] = ledger
         
-        # Write back to JSONBin
         updated = {
             "filename": "install_ledger.json",
             "installs": installs
@@ -115,77 +133,145 @@ def register_tool_actions(tool_name):
         if not os.path.exists(tool_script):
             return {"error": f"Tool script not found: {tool_script}"}
         
-        # Import system_settings registration function
         sys.path.insert(0, BASE_DIR)
-        from system_settings import register_tool_from_script
+        from system_settings import add_tool
         
-        result = register_tool_from_script(tool_name, tool_script)
+        result = add_tool({"tool_name": tool_name, "script_path": tool_script})
         return result
         
     except Exception as e:
         return {"error": f"Failed to register actions: {e}"}
 
 
+def check_claude_authentication():
+    """Check if Claude Code is authenticated"""
+    try:
+        claude_path = os.path.expanduser("~/.local/bin/claude")
+        
+        if not os.path.exists(claude_path):
+            return False
+        
+        # Run claude auth status check
+        result = subprocess.run(
+            [claude_path, "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        
+        # Check if authenticated based on output or exit code
+        return result.returncode == 0 or "authenticated" in result.stdout.lower()
+        
+    except Exception:
+        return False
+
+
+def wait_for_authentication(timeout=300, poll_interval=5):
+    """
+    Wait for Claude Code authentication to complete
+    
+    Args:
+        timeout: Maximum time to wait in seconds (default 5 minutes)
+        poll_interval: Time between checks in seconds (default 5 seconds)
+    
+    Returns:
+        {"authenticated": True} if successful
+        {"authenticated": False, "error": "..."} if timeout or failure
+    """
+    import time
+    
+    print(f"\n⏸️  Waiting for authentication to complete...", file=sys.stderr)
+    print(f"   Open your browser and click 'Allow' when prompted.", file=sys.stderr)
+    print(f"   Timeout: {timeout}s (checking every {poll_interval}s)\n", file=sys.stderr)
+    
+    start_time = time.time()
+    attempts = 0
+    
+    while (time.time() - start_time) < timeout:
+        attempts += 1
+        
+        if check_claude_authentication():
+            elapsed = time.time() - start_time
+            print(f"\n✅ Authentication verified! (took {elapsed:.1f}s, {attempts} checks)", file=sys.stderr)
+            return {"authenticated": True}
+        
+        # Print progress dot
+        print(".", end="", flush=True, file=sys.stderr)
+        time.sleep(poll_interval)
+    
+    print(f"\n\n❌ Authentication timeout after {timeout}s", file=sys.stderr)
+    return {
+        "authenticated": False,
+        "error": f"User did not complete authentication within {timeout} seconds"
+    }
+
+
 def run_setup_script(script_path):
     """Execute tool setup script (e.g., OAuth flow)"""
     try:
-        full_path = os.path.join(BASE_DIR, script_path)
+        mounted_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
+        container_path = os.path.join(BASE_DIR, script_path)
         
-        if not os.path.exists(full_path):
-            return {"error": f"Setup script not found: {full_path}"}
+        if os.path.exists(mounted_path):
+            script_full_path = mounted_path
+        elif os.path.exists(container_path):
+            script_full_path = container_path
+        else:
+            return {
+                "error": f"Setup script not found",
+                "tried_paths": [mounted_path, container_path]
+            }
         
-        # Make executable
-        os.chmod(full_path, 0o755)
+        os.chmod(script_full_path, 0o755)
         
-        # Run script
+        print(f"\n🔐 Running authentication setup: {script_full_path}\n", file=sys.stderr)
+        
         result = subprocess.run(
-            ["bash", full_path],
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 minute timeout for auth flows
+            ["bash", script_full_path],
+            timeout=300
         )
         
         if result.returncode == 0:
             return {
                 "status": "success",
-                "output": result.stdout
+                "message": "Authentication setup completed"
             }
         else:
             return {
-                "error": "Setup script failed",
-                "stderr": result.stderr
+                "error": "Authentication setup failed",
+                "exit_code": result.returncode
             }
             
+    except subprocess.TimeoutExpired:
+        return {"error": "Authentication setup timed out"}
     except Exception as e:
         return {"error": f"Setup script execution failed: {e}"}
 
 
-def unlock_marketplace_tool(tool_name):
+def find_tool_location(tool_name):
     """
-    Main unlock function - data-driven from app store config
-    
-    Flow:
-    1. Load tool config from app store
-    2. Check user has enough credits
-    3. Deduct credits
-    4. Add to tools_unlocked
-    5. Sync to JSONBin
-    6. Register tool actions
-    7. Run setup script if needed
-    8. Return unlock message
+    Determine where tool exists:
+    - 'preinstalled': exists in system_settings.ndjson
+    - 'marketplace': exists in orchestrate_app_store.json
+    - 'not_found': doesn't exist anywhere
     """
+    # Check registry for pre-installed tool
+    registry = load_registry()
+    for entry in registry:
+        if entry.get("tool") == tool_name and entry.get("action") == "__tool__":
+            return "preinstalled", entry.get("referral_unlock_cost", 0)
     
-    # Load app store config
+    # Check app store for marketplace tool
     app_store = load_app_store()
-    if "error" in app_store:
-        return app_store
+    if tool_name in app_store:
+        return "marketplace", app_store[tool_name].get("referral_unlock_cost", 0)
     
-    if tool_name not in app_store:
-        return {"error": f"Tool '{tool_name}' not found in app store"}
-    
-    tool_config = app_store[tool_name]
-    
-    # Load local ledger
+    return "not_found", 0
+
+
+def unlock_preinstalled_tool(tool_name, cost):
+    """Unlock a pre-installed tool (mark as unlocked in registry)"""
+    # Load ledger
     ledger = load_local_ledger()
     if "error" in ledger:
         return ledger
@@ -195,13 +281,11 @@ def unlock_marketplace_tool(tool_name):
     if tool_name in unlocked_tools:
         return {
             "status": "already_unlocked",
-            "message": f"✅ {tool_config['label']} is already unlocked"
+            "message": f"✅ {tool_name} is already unlocked"
         }
     
     # Check credits
-    cost = tool_config.get("referral_unlock_cost", 0)
     current_credits = ledger.get("referral_credits", 0)
-    
     if current_credits < cost:
         return {
             "error": f"Insufficient credits. Need {cost}, have {current_credits}",
@@ -210,8 +294,6 @@ def unlock_marketplace_tool(tool_name):
     
     # Deduct credits
     ledger["referral_credits"] -= cost
-    
-    # Add to unlocked tools
     ledger["tools_unlocked"].append(tool_name)
     
     # Save local ledger
@@ -224,8 +306,68 @@ def unlock_marketplace_tool(tool_name):
     if user_id:
         sync_result = sync_to_jsonbin(user_id, ledger)
         if "error" in sync_result:
-            # Non-fatal - local unlock still worked
-            print(f"Warning: JSONBin sync failed: {sync_result['error']}", file=sys.stderr)
+            print(f"⚠️  Warning: JSONBin sync failed: {sync_result['error']}", file=sys.stderr)
+    
+    # Mark as unlocked in registry
+    registry = load_registry()
+    for entry in registry:
+        if entry.get("tool") == tool_name and entry.get("action") == "__tool__":
+            entry["locked"] = False
+            entry["unlocked"] = True
+            break
+    
+    save_registry(registry)
+    
+    return {
+        "status": "success",
+        "tool": tool_name,
+        "type": "preinstalled",
+        "credits_remaining": ledger["referral_credits"],
+        "message": f"✅ {tool_name} unlocked! {ledger['referral_credits']} credits remaining."
+    }
+
+
+def unlock_marketplace_tool(tool_name, cost):
+    """Unlock a marketplace tool (register + add to registry)"""
+    app_store = load_app_store()
+    tool_config = app_store.get(tool_name, {})
+    
+    # Load ledger
+    ledger = load_local_ledger()
+    if "error" in ledger:
+        return ledger
+    
+    # Check if already unlocked
+    unlocked_tools = ledger.get("tools_unlocked", [])
+    if tool_name in unlocked_tools:
+        return {
+            "status": "already_unlocked",
+            "message": f"✅ {tool_config.get('label', tool_name)} is already unlocked"
+        }
+    
+    # Check credits
+    current_credits = ledger.get("referral_credits", 0)
+    if current_credits < cost:
+        return {
+            "error": f"Insufficient credits. Need {cost}, have {current_credits}",
+            "credits_needed": cost - current_credits
+        }
+    
+    # Deduct credits
+    ledger["referral_credits"] -= cost
+    ledger["tools_unlocked"].append(tool_name)
+    
+    # Save local ledger
+    save_result = save_local_ledger(ledger)
+    if "error" in save_result:
+        return save_result
+    
+    # Sync to JSONBin
+    user_id = get_user_id()
+    if user_id:
+        sync_result = sync_to_jsonbin(user_id, ledger)
+        if "error" in sync_result:
+            print(f"⚠️  Warning: JSONBin sync failed: {sync_result['error']}", file=sys.stderr)
     
     # Register tool actions
     register_result = register_tool_actions(tool_name)
@@ -236,45 +378,94 @@ def unlock_marketplace_tool(tool_name):
         }
     
     # Run setup script if specified
-    setup_output = None
     if "setup_script" in tool_config:
+        print(f"\n⚙️  {tool_config.get('label', tool_name)} requires authentication setup...\n", file=sys.stderr)
+        
         setup_result = run_setup_script(tool_config["setup_script"])
+        
         if "error" in setup_result:
+            print(f"\n❌ Authentication setup script failed!\n", file=sys.stderr)
+            print(f"Error: {setup_result['error']}\n", file=sys.stderr)
+            
+            if "tried_paths" in setup_result:
+                print(f"Tried locations:", file=sys.stderr)
+                for path in setup_result["tried_paths"]:
+                    print(f"  - {path}", file=sys.stderr)
+            
             return {
-                "status": "partial_success",
-                "message": "Tool unlocked and registered, but setup script failed",
+                "status": "error",
+                "error": "Tool unlocked but authentication setup failed",
                 "setup_error": setup_result["error"],
-                "unlock_message": tool_config.get("unlock_message", "Tool unlocked")
+                "message": f"❌ {tool_config.get('label', tool_name)} unlocked but authentication failed.\n\n"
+                          f"The tool is registered but cannot be used until authentication completes.\n\n"
+                          f"Please run the setup script manually.",
+                "unlock_message": tool_config.get("unlock_message", "")
             }
-        setup_output = setup_result.get("output")
+        
+        # Wait for authentication to complete
+        print(f"\n🔍 Verifying authentication status...", file=sys.stderr)
+        auth_result = wait_for_authentication(timeout=300, poll_interval=5)
+        
+        if not auth_result.get('authenticated'):
+            return {
+                "status": "error",
+                "error": "Authentication timeout",
+                "message": f"❌ {tool_config.get('label', tool_name)} authentication not completed.\n\n"
+                          f"{auth_result.get('error', 'User did not complete authentication.')}\n\n"
+                          f"Please run the authentication setup again.",
+                "unlock_message": tool_config.get("unlock_message", "")
+            }
+        
+        print(f"\n✅ {tool_config.get('label', tool_name)} authenticated and ready!\n", file=sys.stderr)
     
     # Build success response
     response = {
         "status": "success",
         "tool": tool_name,
-        "label": tool_config["label"],
+        "type": "marketplace",
+        "label": tool_config.get("label", tool_name),
         "credits_remaining": ledger["referral_credits"],
-        "unlock_message": tool_config.get("unlock_message", f"✅ {tool_config['label']} unlocked!")
+        "unlock_message": tool_config.get("unlock_message", f"✅ {tool_config.get('label', tool_name)} unlocked!")
     }
     
-    # Add setup output if present
-    if setup_output:
-        response["setup_output"] = setup_output
-    
-    # Add post-unlock nudge if present
     if "post_unlock_nudge" in tool_config:
         response["nudge"] = tool_config["post_unlock_nudge"]
     
     return response
 
 
+def unlock_tool(tool_name):
+    """
+    Unified unlock function - intelligently routes to correct unlock flow
+    
+    Flow:
+    1. Check if tool exists in system_settings.ndjson (pre-installed)
+       → If yes: unlock_preinstalled_tool()
+    2. Check if tool exists in orchestrate_app_store.json (marketplace)
+       → If yes: unlock_marketplace_tool()
+    3. If neither: return error
+    """
+    
+    # Find where tool exists
+    location, cost = find_tool_location(tool_name)
+    
+    if location == "not_found":
+        return {
+            "error": f"Tool '{tool_name}' not found in pre-installed tools or marketplace"
+        }
+    
+    # Route to appropriate unlock function
+    if location == "preinstalled":
+        return unlock_preinstalled_tool(tool_name, cost)
+    else:  # marketplace
+        return unlock_marketplace_tool(tool_name, cost)
+
+
 def list_marketplace_tools():
     """List all available marketplace tools with lock status"""
     app_store = load_app_store()
-    if "error" in app_store:
-        return app_store
-    
     ledger = load_local_ledger()
+    
     if "error" in ledger:
         return ledger
     
@@ -285,16 +476,16 @@ def list_marketplace_tools():
     for tool_name, config in app_store.items():
         tools.append({
             "name": tool_name,
-            "label": config["label"],
-            "description": config["description"],
+            "label": config.get("label", tool_name),
+            "description": config.get("description", ""),
             "cost": config.get("referral_unlock_cost", 0),
             "priority": config.get("priority", 999),
             "locked": tool_name not in unlocked,
             "requires_subscription": config.get("requires_subscription", False),
-            "subscription_type": config.get("subscription_type", None)
+            "subscription_type": config.get("subscription_type", None),
+            "requires_credentials": config.get("requires_credentials", False)
         })
     
-    # Sort by priority
     tools.sort(key=lambda x: x["priority"])
     
     return {
@@ -320,7 +511,7 @@ def get_credits_balance():
 
 # Action registry for execution_hub
 ACTIONS = {
-    "unlock_marketplace_tool": unlock_marketplace_tool,
+    "unlock_tool": unlock_tool,
     "list_marketplace_tools": list_marketplace_tools,
     "get_credits_balance": get_credits_balance
 }
@@ -332,25 +523,33 @@ def execute_action(action, params):
         return {"error": f"Unknown action: {action}"}
     
     try:
-        return ACTIONS[action](**params)
+        # Handle both dict params and direct tool_name string
+        if isinstance(params, dict):
+            tool_name = params.get("tool_name")
+        else:
+            tool_name = params
+        
+        if action == "unlock_tool":
+            return unlock_tool(tool_name)
+        else:
+            return ACTIONS[action](**params if isinstance(params, dict) else {})
     except Exception as e:
         return {"error": f"Action execution failed: {e}"}
 
 
 if __name__ == "__main__":
-    # CLI usage
     if len(sys.argv) < 2:
-        print("Usage: unlock_tool.py <action> [params...]")
-        print("Actions: unlock_marketplace_tool, list_marketplace_tools, get_credits_balance")
+        print("Usage: unlock_tool.py <action> [tool_name]")
+        print("Actions: unlock_tool, list_marketplace_tools, get_credits_balance")
         sys.exit(1)
     
     action = sys.argv[1]
     
-    if action == "unlock_marketplace_tool":
+    if action == "unlock_tool":
         if len(sys.argv) < 3:
-            print("Usage: unlock_tool.py unlock_marketplace_tool <tool_name>")
+            print("Usage: unlock_tool.py unlock_tool <tool_name>")
             sys.exit(1)
-        result = unlock_marketplace_tool(sys.argv[2])
+        result = unlock_tool(sys.argv[2])
         print(json.dumps(result, indent=2))
     
     elif action == "list_marketplace_tools":

@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 """
-System Settings Manager - Complete Version
+System Settings Manager
 
-Handles:
-- Loading/saving system_settings.ndjson
-- Registering tool actions automatically from tool scripts
-- Managing credentials
+Core functions:
+- Credential management (set/get API keys)
+- Tool registration (add/remove tools and actions)
+- Runtime refresh (pull updates, preserve user data)
 - Memory file tracking
-- CLI route management
-- Runtime refresh (pull updates while preserving user data)
 """
 
 import os
@@ -19,11 +17,15 @@ import inspect
 import subprocess
 import shutil
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_REGISTRY = os.path.join(BASE_DIR, "system_settings.ndjson")
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 CREDENTIALS_FILE = os.path.join(TOOLS_DIR, "credentials.json")
 
+
+# ============================================================================
+# CREDENTIAL MANAGEMENT
+# ============================================================================
 
 def load_credential(key):
     """Load a credential from credentials.json"""
@@ -55,6 +57,42 @@ def save_credential(key, value):
         return {"error": f"Failed to save credential: {e}"}
 
 
+def set_credential(params):
+    """
+    Set a credential for a tool
+    
+    Required:
+    - tool_name: name of tool (e.g., "outline_editor")
+    - value: credential value
+    
+    Example:
+    {"tool_name": "outline_editor", "value": "sk-outline-abc123"}
+    """
+    tool_name = params.get("tool_name")
+    value = params.get("value")
+
+    if not tool_name or not value:
+        return {"status": "error", "message": "Missing required fields: tool_name, value"}
+
+    # Credential key format: {tool_name}_api_key
+    key = f"{tool_name}_api_key"
+    
+    result = save_credential(key, value)
+    
+    if "error" in result:
+        return result
+
+    return {
+        "status": "success",
+        "message": f"Credential set for {tool_name}",
+        "key": key
+    }
+
+
+# ============================================================================
+# REGISTRY MANAGEMENT
+# ============================================================================
+
 def load_registry():
     """Load system_settings.ndjson as list of entries"""
     try:
@@ -75,80 +113,177 @@ def save_registry(entries):
         return {"error": f"Failed to save registry: {e}"}
 
 
-def set_credential(params):
-    """
-    Set a credential for a tool.
+def extract_actions_from_script(tool_script_path):
+    """Extract actions from tool script by looking for ACTIONS dict"""
+    try:
+        spec = importlib.util.spec_from_file_location("tool_module", tool_script_path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
 
+        if not hasattr(module, 'ACTIONS'):
+            return {"error": "Tool script has no ACTIONS dictionary"}
+
+        actions_dict = module.ACTIONS
+        actions = []
+        
+        for action_name, action_func in actions_dict.items():
+            sig = inspect.signature(action_func)
+            params = []
+
+            for param_name, param in sig.parameters.items():
+                param_info = {
+                    "name": param_name,
+                    "required": param.default == inspect.Parameter.empty
+                }
+                
+                if param.annotation != inspect.Parameter.empty:
+                    param_info["type"] = param.annotation.__name__
+                
+                params.append(param_info)
+
+            description = action_func.__doc__ or f"Execute {action_name}"
+            description = description.strip().split('\n')[0]
+
+            actions.append({
+                "action": action_name,
+                "description": description,
+                "parameters": params
+            })
+
+        return {"status": "success", "actions": actions}
+
+    except Exception as e:
+        return {"error": f"Failed to extract actions: {e}"}
+
+
+def add_tool(params):
+    """
+    Register a tool and all its actions
+    
     Required:
-    - value: credential value
-    - script_path: path to tool script (e.g., "tools/outline_editor.py")
-
-    Optional:
-    - key: credential key (default: inferred from script_path)
-
-    Example:
-    {"value": "sk-outline-abc123", "script_path": "tools/outline_editor.py"}
+    - tool_name: name of tool
+    - script_path: path to tool script (optional, auto-detects from tools/{tool_name}.py)
     """
-    value = params.get("value")
+    tool_name = params.get("tool_name")
     script_path = params.get("script_path")
-    key = params.get("key")
 
-    if not value:
-        return {"status": "error", "message": "Missing required field: value"}
+    if not tool_name:
+        return {"status": "error", "message": "Missing required field: tool_name"}
 
+    # Auto-detect script path
     if not script_path:
-        return {"status": "error", "message": "Missing required field: script_path"}
+        script_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
 
-    # Infer key from script_path if not provided
-    if not key:
-        # Extract tool name from script_path (e.g., "tools/outline_editor.py" -> "outline_api_key")
-        tool_name = os.path.basename(script_path).replace(".py", "")
-        key = f"{tool_name}_api_key"
+    if not os.path.exists(script_path):
+        return {"error": f"Tool script not found: {script_path}"}
 
-    result = save_credential(key, value)
+    # Extract actions
+    extract_result = extract_actions_from_script(script_path)
+    if "error" in extract_result:
+        return extract_result
 
-    if "error" in result:
-        return result
+    actions = extract_result["actions"]
+
+    # Load registry
+    registry = load_registry()
+
+    # Remove existing entries for this tool
+    registry = [entry for entry in registry if entry.get("tool") != tool_name]
+
+    # Add tool header
+    registry.append({
+        "tool": tool_name,
+        "action": "__tool__",
+        "description": f"{tool_name} tool",
+        "unlocked": True
+    })
+
+    # Add actions
+    for action in actions:
+        entry = {
+            "tool": tool_name,
+            "action": action["action"],
+            "description": action["description"]
+        }
+        
+        if action["parameters"]:
+            entry["parameters"] = action["parameters"]
+        
+        registry.append(entry)
+
+    # Save
+    save_result = save_registry(registry)
+    if "error" in save_result:
+        return save_result
 
     return {
         "status": "success",
-        "message": f"Credential '{key}' set successfully",
-        "key": key
+        "tool": tool_name,
+        "actions_registered": len(actions)
+    }
+
+
+def remove_tool(params):
+    """
+    Remove a tool from registry
+    
+    Required:
+    - tool_name: name of tool to remove
+    """
+    tool_name = params.get("tool_name")
+
+    if not tool_name:
+        return {"status": "error", "message": "Missing required field: tool_name"}
+
+    registry = load_registry()
+
+    original_count = len(registry)
+    registry = [entry for entry in registry if entry.get("tool") != tool_name]
+    removed_count = original_count - len(registry)
+
+    if removed_count == 0:
+        return {"status": "error", "message": f"Tool '{tool_name}' not found"}
+
+    save_result = save_registry(registry)
+    if "error" in save_result:
+        return save_result
+
+    return {
+        "status": "success",
+        "message": f"Removed {removed_count} entries for '{tool_name}'"
     }
 
 
 def add_action(params):
     """
-    Add a new action to system_settings.ndjson
-
+    Add a single action to a tool
+    
     Required:
-    - tool: tool name
-    - action: action name
-    - script: script path
-    - params: list of parameter names
-    - example: example usage dict
+    - tool_name: name of tool
+    - action_name: name of action
+    - description: action description
+    
+    Optional:
+    - parameters: list of parameter dicts
     """
-    tool = params.get("tool")
-    action = params.get("action")
-    script = params.get("script")
-    action_params = params.get("params", [])
-    example = params.get("example")
+    tool_name = params.get("tool_name")
+    action_name = params.get("action_name")
+    description = params.get("description", f"Execute {action_name}")
+    parameters = params.get("parameters", [])
 
-    if not all([tool, action, script]):
-        return {"status": "error", "message": "Missing required fields: tool, action, script"}
+    if not tool_name or not action_name:
+        return {"status": "error", "message": "Missing required fields: tool_name, action_name"}
 
     registry = load_registry()
 
-    # Add action entry
     entry = {
-        "tool": tool,
-        "action": action,
-        "script_path": script,
-        "params": action_params
+        "tool": tool_name,
+        "action": action_name,
+        "description": description
     }
-
-    if example:
-        entry["example"] = example
+    
+    if parameters:
+        entry["parameters"] = parameters
 
     registry.append(entry)
 
@@ -158,68 +293,33 @@ def add_action(params):
 
     return {
         "status": "success",
-        "message": f"Action '{action}' added to '{tool}'"
+        "message": f"Action '{action_name}' added to '{tool_name}'"
     }
 
 
-def list_actions(params):
+def remove_action(params):
     """
-    List all actions for a specific tool
-
+    Remove a specific action from a tool
+    
     Required:
-    - tool: tool name
+    - tool_name: name of tool
+    - action_name: name of action to remove
     """
-    tool = params.get("tool")
+    tool_name = params.get("tool_name")
+    action_name = params.get("action_name")
 
-    if not tool:
-        return {"status": "error", "message": "Missing required field: tool"}
-
-    return get_tool_actions(tool)
-
-
-def list_tools(params):
-    """List all registered tools (alias for list_all_tools)"""
-    return list_all_tools()
-
-
-def add_tool(params):
-    """
-    Register a new tool
-
-    Required:
-    - tool: tool name
-    - path: path to tool script
-    """
-    tool = params.get("tool")
-    path = params.get("path")
-
-    if not all([tool, path]):
-        return {"status": "error", "message": "Missing required fields: tool, path"}
-
-    return register_tool_from_script(tool, path)
-
-
-def remove_tool(params):
-    """
-    Remove a tool from registry
-
-    Required:
-    - tool: tool name
-    """
-    tool = params.get("tool")
-
-    if not tool:
-        return {"status": "error", "message": "Missing required field: tool"}
+    if not tool_name or not action_name:
+        return {"status": "error", "message": "Missing required fields: tool_name, action_name"}
 
     registry = load_registry()
 
-    # Remove all entries for this tool
     original_count = len(registry)
-    registry = [entry for entry in registry if entry.get("tool") != tool]
+    registry = [entry for entry in registry 
+                if not (entry.get("tool") == tool_name and entry.get("action") == action_name)]
     removed_count = original_count - len(registry)
 
     if removed_count == 0:
-        return {"status": "error", "message": f"Tool '{tool}' not found in registry"}
+        return {"status": "error", "message": f"Action '{action_name}' not found in '{tool_name}'"}
 
     save_result = save_registry(registry)
     if "error" in save_result:
@@ -227,14 +327,58 @@ def remove_tool(params):
 
     return {
         "status": "success",
-        "message": f"Removed {removed_count} entries for tool '{tool}'"
+        "message": f"Removed action '{action_name}' from '{tool_name}'"
     }
 
 
+def list_tools(params):
+    """List all registered tools"""
+    registry = load_registry()
+
+    tools = {}
+    for entry in registry:
+        if entry.get("action") == "__tool__":
+            tool_name = entry.get("tool")
+            tools[tool_name] = {
+                "name": tool_name,
+                "unlocked": entry.get("unlocked", False),
+                "description": entry.get("description", "")
+            }
+
+    return {
+        "status": "success",
+        "tools": list(tools.values())
+    }
+
+
+def list_supported_actions(params):
+    """List all actions in the system"""
+    registry = load_registry()
+
+    actions = []
+    for entry in registry:
+        if entry.get("action") != "__tool__":
+            actions.append({
+                "tool": entry.get("tool"),
+                "action": entry.get("action"),
+                "description": entry.get("description", ""),
+                "params": entry.get("parameters", [])
+            })
+
+    return {
+        "status": "success",
+        "actions": actions
+    }
+
+
+# ============================================================================
+# MEMORY FILE TRACKING
+# ============================================================================
+
 def add_memory_file(params):
     """
-    Add a file to memory tracking list
-
+    Add a file to memory tracking
+    
     Required:
     - path: file path to track
     """
@@ -253,6 +397,7 @@ def add_memory_file(params):
     if path not in memory_files:
         memory_files.append(path)
 
+    os.makedirs(os.path.dirname(memory_config), exist_ok=True)
     with open(memory_config, 'w') as f:
         json.dump(memory_files, f, indent=2)
 
@@ -265,7 +410,7 @@ def add_memory_file(params):
 def remove_memory_file(params):
     """
     Remove a file from memory tracking
-
+    
     Required:
     - path: file path to remove
     """
@@ -301,103 +446,12 @@ def list_memory_files(params):
     memory_config = os.path.join(BASE_DIR, "data", "memory_files.json")
 
     if not os.path.exists(memory_config):
-        return {
-            "status": "success",
-            "memory_files": []
-        }
+        return {"status": "success", "memory_files": []}
 
     with open(memory_config, 'r') as f:
         memory_files = json.load(f)
 
-    return {
-        "status": "success",
-        "memory_files": memory_files
-    }
-
-
-def add_cli_route(params):
-    """
-    Add a CLI command route
-
-    Required:
-    - action_name: name of the action
-    - command: command to execute
-    """
-    action_name = params.get("action_name")
-    command = params.get("command")
-
-    if not all([action_name, command]):
-        return {"status": "error", "message": "Missing required fields: action_name, command"}
-
-    cli_config = os.path.join(BASE_DIR, "data", "cli_routes.json")
-
-    routes = {}
-    if os.path.exists(cli_config):
-        with open(cli_config, 'r') as f:
-            routes = json.load(f)
-
-    routes[action_name] = command
-
-    with open(cli_config, 'w') as f:
-        json.dump(routes, f, indent=2)
-
-    return {
-        "status": "success",
-        "message": f"Added CLI route '{action_name}'"
-    }
-
-
-def remove_cli_route(params):
-    """
-    Remove a CLI command route
-
-    Required:
-    - action_name: name of the action to remove
-    """
-    action_name = params.get("action_name")
-
-    if not action_name:
-        return {"status": "error", "message": "Missing required field: action_name"}
-
-    cli_config = os.path.join(BASE_DIR, "data", "cli_routes.json")
-
-    if not os.path.exists(cli_config):
-        return {"status": "error", "message": "No CLI routes configured"}
-
-    with open(cli_config, 'r') as f:
-        routes = json.load(f)
-
-    if action_name not in routes:
-        return {"status": "error", "message": f"Route '{action_name}' not found"}
-
-    del routes[action_name]
-
-    with open(cli_config, 'w') as f:
-        json.dump(routes, f, indent=2)
-
-    return {
-        "status": "success",
-        "message": f"Removed CLI route '{action_name}'"
-    }
-
-
-def list_cli_routes(params):
-    """List all CLI routes"""
-    cli_config = os.path.join(BASE_DIR, "data", "cli_routes.json")
-
-    if not os.path.exists(cli_config):
-        return {
-            "status": "success",
-            "routes": {}
-        }
-
-    with open(cli_config, 'r') as f:
-        routes = json.load(f)
-
-    return {
-        "status": "success",
-        "routes": routes
-    }
+    return {"status": "success", "memory_files": memory_files}
 
 
 def build_working_memory(params):
@@ -428,230 +482,37 @@ def build_working_memory(params):
 
     # Save to working_memory.json
     output_path = os.path.join(BASE_DIR, "data", "working_memory.json")
+    os.makedirs(os.path.dirname(output_path), exist_ok=True)
     with open(output_path, 'w') as f:
         json.dump(working_memory, f, indent=2)
 
     return {
         "status": "success",
-        "message": "Working memory built successfully",
+        "message": "Working memory built",
         "files_loaded": len(working_memory)
     }
 
 
-def list_supported_actions(params):
-    """List all supported actions in the system"""
-    registry = load_registry()
+# ============================================================================
+# RUNTIME REFRESH
+# ============================================================================
 
-    actions = []
-    for entry in registry:
-        if entry.get("action") != "__tool__":
-            actions.append({
-                "tool": entry.get("tool"),
-                "action": entry.get("action"),
-                "params": entry.get("params", [])
-            })
-
-    return {
-        "status": "success",
-        "actions": actions
-    }
-
-
-def extract_actions_from_script(tool_script_path):
-    """
-    Extract actions from tool script by looking for ACTIONS dict
-
-    Returns list of action definitions with parameters
-    """
-    try:
-        # Load the tool module
-        spec = importlib.util.spec_from_file_location("tool_module", tool_script_path)
-        module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(module)
-
-        # Look for ACTIONS dictionary
-        if not hasattr(module, 'ACTIONS'):
-            return {"error": f"Tool script has no ACTIONS dictionary"}
-
-        actions_dict = module.ACTIONS
-
-        # Extract action metadata
-        actions = []
-        for action_name, action_func in actions_dict.items():
-            # Get function signature
-            sig = inspect.signature(action_func)
-            params = []
-
-            for param_name, param in sig.parameters.items():
-                param_info = {
-                    "name": param_name,
-                    "required": param.default == inspect.Parameter.empty
-                }
-
-                # Try to infer type from annotation
-                if param.annotation != inspect.Parameter.empty:
-                    param_info["type"] = param.annotation.__name__
-
-                params.append(param_info)
-
-            # Get docstring if available
-            description = action_func.__doc__ or f"Execute {action_name}"
-            description = description.strip().split('\n')[0]  # First line only
-
-            actions.append({
-                "action": action_name,
-                "description": description,
-                "parameters": params
-            })
-
-        return {"status": "success", "actions": actions}
-
-    except Exception as e:
-        return {"error": f"Failed to extract actions: {e}"}
-
-
-def register_tool_from_script(tool_name, tool_script_path=None):
-    """
-    Register a tool and all its actions in system_settings.ndjson
-
-    Args:
-        tool_name: Name of the tool (e.g., "claude_assistant")
-        tool_script_path: Path to tool script (optional, will auto-detect)
-
-    Returns:
-        {"status": "success"} or {"error": "message"}
-    """
-
-    # Auto-detect script path if not provided
-    if tool_script_path is None:
-        tool_script_path = os.path.join(TOOLS_DIR, f"{tool_name}.py")
-
-    if not os.path.exists(tool_script_path):
-        return {"error": f"Tool script not found: {tool_script_path}"}
-
-    # Extract actions from script
-    extract_result = extract_actions_from_script(tool_script_path)
-    if "error" in extract_result:
-        return extract_result
-
-    actions = extract_result["actions"]
-
-    # Load current registry
-    registry = load_registry()
-
-    # Remove any existing entries for this tool
-    registry = [entry for entry in registry
-                if entry.get("tool") != tool_name]
-
-    # Add tool header entry
-    registry.append({
-        "tool": tool_name,
-        "action": "__tool__",
-        "description": f"{tool_name} tool",
-        "unlocked": True  # Newly unlocked tools are available
-    })
-
-    # Add action entries
-    for action in actions:
-        entry = {
-            "tool": tool_name,
-            "action": action["action"],
-            "description": action["description"]
-        }
-
-        # Add parameters if present
-        if action["parameters"]:
-            entry["parameters"] = action["parameters"]
-
-        registry.append(entry)
-
-    # Save updated registry
-    save_result = save_registry(registry)
-    if "error" in save_result:
-        return save_result
-
-    return {
-        "status": "success",
-        "tool": tool_name,
-        "actions_registered": len(actions)
-    }
-
-
-def get_tool_actions(tool_name):
-    """Get all registered actions for a tool"""
-    registry = load_registry()
-
-    actions = [entry for entry in registry
-               if entry.get("tool") == tool_name
-               and entry.get("action") != "__tool__"]
-
-    return {
-        "status": "success",
-        "tool": tool_name,
-        "actions": actions
-    }
-
-
-def list_all_tools():
-    """List all registered tools with their unlock status"""
-    registry = load_registry()
-
-    # Get tool headers
-    tools = {}
-    for entry in registry:
-        if entry.get("action") == "__tool__":
-            tool_name = entry.get("tool")
-            tools[tool_name] = {
-                "name": tool_name,
-                "unlocked": entry.get("unlocked", False),
-                "description": entry.get("description", "")
-            }
-
-    return {
-        "status": "success",
-        "tools": list(tools.values())
-    }
-
-
-def mark_tool_unlocked(tool_name):
-    """Mark a tool as unlocked in the registry"""
-    registry = load_registry()
-
-    # Find tool header and mark as unlocked
-    updated = False
-    for entry in registry:
-        if entry.get("tool") == tool_name and entry.get("action") == "__tool__":
-            entry["unlocked"] = True
-            updated = True
-            break
-
-    if not updated:
-        return {"error": f"Tool {tool_name} not found in registry"}
-
-    save_result = save_registry(registry)
-    if "error" in save_result:
-        return save_result
-
-    return {"status": "success", "tool": tool_name}
-
-
-def refresh_runtime():
+def refresh_runtime(params):
     """
     Pull latest updates from repo while preserving user data
-
-    Protected items:
-    - data/ directory (credentials, queues, all user data)
+    
+    Protected:
+    - data/ directory (credentials, queues, user data)
     - container_state/ (system identity, referrals)
-    - User's unlock status in registry
-
-    Updated items:
-    - orchestrate_app_store.json (new tools appear)
-    - Tool scripts (bug fixes, improvements)
-    - System messages (update_messages.json)
-    - New actions for existing tools
+    - User's unlock status
+    
+    Updated:
+    - Tool scripts
+    - orchestrate_app_store.json
+    - System messages
     """
     try:
-        # Save current user state before pulling
+        # Save user state
         referral_path = os.path.join(BASE_DIR, "container_state", "referrals.json")
         unlocked_tools = set()
         user_credits = 0
@@ -662,7 +523,7 @@ def refresh_runtime():
                 unlocked_tools = set(referral_data.get("tools_unlocked", []))
                 user_credits = referral_data.get("referral_credits", 0)
 
-        # Pull latest changes from repo
+        # Git pull
         result = subprocess.run(
             ["git", "-C", BASE_DIR, "pull"],
             capture_output=True,
@@ -671,12 +532,9 @@ def refresh_runtime():
         )
 
         if result.returncode != 0:
-            return {
-                "error": "Git pull failed",
-                "details": result.stderr
-            }
+            return {"error": "Git pull failed", "details": result.stderr}
 
-        # Restore user's unlock status in registry
+        # Restore unlock status
         registry = load_registry()
         for entry in registry:
             tool_name = entry.get("tool")
@@ -685,17 +543,9 @@ def refresh_runtime():
 
         save_registry(registry)
 
-        # Force refresh of update_messages.json from repo
-        repo_messages = os.path.join(BASE_DIR, "data", "update_messages.json")
-        git_messages = os.path.join(BASE_DIR, ".git", "..", "data", "update_messages.json")
-
-        if os.path.exists(git_messages):
-            shutil.copy(git_messages, repo_messages)
-
         return {
             "status": "success",
-            "message": "Runtime refreshed successfully",
-            "git_output": result.stdout.strip(),
+            "message": "Runtime refreshed",
             "tools_preserved": list(unlocked_tools),
             "credits_preserved": user_credits
         }
@@ -706,33 +556,23 @@ def refresh_runtime():
         return {"error": f"Runtime refresh failed: {e}"}
 
 
-def refresh_orchestrate_runtime(params):
-    """Alias for refresh_runtime"""
-    return refresh_runtime()
+# ============================================================================
+# ACTION REGISTRY
+# ============================================================================
 
-
-# Action registry for execution_hub
 ACTIONS = {
     "set_credential": set_credential,
-    "add_action": add_action,
-    "list_actions": list_actions,
-    "list_tools": list_tools,
     "add_tool": add_tool,
     "remove_tool": remove_tool,
+    "add_action": add_action,
+    "remove_action": remove_action,
+    "list_tools": list_tools,
+    "list_supported_actions": list_supported_actions,
     "add_memory_file": add_memory_file,
     "remove_memory_file": remove_memory_file,
     "list_memory_files": list_memory_files,
-    "add_cli_route": add_cli_route,
-    "remove_cli_route": remove_cli_route,
-    "list_cli_routes": list_cli_routes,
     "build_working_memory": build_working_memory,
-    "list_supported_actions": list_supported_actions,
-    "register_tool_from_script": register_tool_from_script,
-    "get_tool_actions": get_tool_actions,
-    "list_all_tools": list_all_tools,
-    "mark_tool_unlocked": mark_tool_unlocked,
-    "refresh_runtime": refresh_runtime,
-    "refresh_orchestrate_runtime": refresh_orchestrate_runtime
+    "refresh_runtime": refresh_runtime
 }
 
 
@@ -740,7 +580,7 @@ def execute_action(action, params):
     """Execute system_settings action"""
     if action not in ACTIONS:
         return {"error": f"Unknown action: {action}"}
-
+    
     try:
         return ACTIONS[action](params)
     except Exception as e:
@@ -752,10 +592,10 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser()
     parser.add_argument('action', help='Action to perform')
-    parser.add_argument('--params', type=str, help='JSON params')
+    parser.add_argument('--params', type=str, help='JSON params', default='{}')
     args = parser.parse_args()
 
-    params = json.loads(args.params) if args.params else {}
+    params = json.loads(args.params)
 
     if args.action in ACTIONS:
         result = ACTIONS[args.action](params)
