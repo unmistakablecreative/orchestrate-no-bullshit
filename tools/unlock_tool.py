@@ -209,7 +209,7 @@ def wait_for_authentication(timeout=300, poll_interval=5):
 def run_setup_script(script_path):
     """Execute tool setup script (e.g., OAuth flow)"""
     try:
-        mounted_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
+        mounted_path = os.path.join("/orchestrate_user", script_path)
         container_path = os.path.join(BASE_DIR, script_path)
         
         if os.path.exists(mounted_path):
