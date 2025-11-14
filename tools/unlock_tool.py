@@ -180,49 +180,10 @@ def register_tool_actions(tool_name):
 
 
 def run_setup_script(script_path):
-    """Execute the setup script from the mounted documents directory"""
+    """Execute the setup script via standalone helper"""
     try:
-        # Build full path to mounted setup script
-        full_script_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
-        
-        if not os.path.exists(full_script_path):
-            return {
-                "status": "error",
-                "message": f"❌ Setup script not found at {full_script_path}"
-            }
-        
-        # Make sure it's executable
-        os.chmod(full_script_path, 0o755)
-        
-        print(f"🔧 Executing setup script: {full_script_path}", file=sys.stderr)
-        
-        # Execute the script
-        result = subprocess.run(
-            ["bash", full_script_path],
-            capture_output=True,
-            text=True,
-            timeout=300  # 5 min timeout for OAuth
-        )
-        
-        if result.returncode == 0:
-            return {
-                "status": "success",
-                "message": "✅ Claude Assistant authenticated and ready!\n\n🎯 You can now assign tasks for autonomous execution.",
-                "stdout": result.stdout
-            }
-        else:
-            return {
-                "status": "error",
-                "message": f"❌ Authentication failed: {result.stderr}",
-                "stdout": result.stdout,
-                "returncode": result.returncode
-            }
-            
-    except subprocess.TimeoutExpired:
-        return {
-            "status": "error",
-            "message": "⏱️ Authentication timed out after 5 minutes. Please try again."
-        }
+        from setup_script_runner import run_setup_script as execute_setup
+        return execute_setup(script_path)
     except Exception as e:
         return {
             "status": "error",
