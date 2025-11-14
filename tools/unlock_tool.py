@@ -173,109 +173,55 @@ def register_tool_actions(tool_name):
         return {"error": f"Failed to register actions: {e}"}
 
 
-def check_claude_authentication():
-    """Check if Claude Code is authenticated"""
+def run_setup_script(script_path):
+    """Execute the setup script from the mounted documents directory"""
     try:
-        claude_path = os.path.expanduser("~/.local/bin/claude")
-
-        if not os.path.exists(claude_path):
-            return False
-
-        # Run claude auth status check
+        # Build full path to mounted setup script
+        full_script_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
+        
+        if not os.path.exists(full_script_path):
+            return {
+                "status": "error",
+                "message": f"❌ Setup script not found at {full_script_path}"
+            }
+        
+        # Make sure it's executable
+        os.chmod(full_script_path, 0o755)
+        
+        print(f"🔧 Executing setup script: {full_script_path}", file=sys.stderr)
+        
+        # Execute the script
         result = subprocess.run(
-            [claude_path, "auth", "status"],
+            ["bash", full_script_path],
             capture_output=True,
             text=True,
-            timeout=10
+            timeout=300  # 5 min timeout for OAuth
         )
-
-        # Check if authenticated based on output or exit code
-        return result.returncode == 0 or "authenticated" in result.stdout.lower()
-
-    except Exception:
-        return False
-
-
-def wait_for_authentication(timeout=300, poll_interval=5):
-    """
-    Wait for Claude Code authentication to complete
-
-    Args:
-        timeout: Maximum time to wait in seconds (default 5 minutes)
-        poll_interval: Time between checks in seconds (default 5 seconds)
-
-    Returns:
-        {"authenticated": True} if successful
-        {"authenticated": False, "error": "..."} if timeout or failure
-    """
-    import time
-
-    print(f"\n⏸️  Waiting for authentication to complete...", file=sys.stderr)
-    print(f"   Open your browser and click 'Allow' when prompted.", file=sys.stderr)
-    print(f"   Timeout: {timeout}s (checking every {poll_interval}s)\n", file=sys.stderr)
-
-    start_time = time.time()
-    attempts = 0
-
-    while (time.time() - start_time) < timeout:
-        attempts += 1
-
-        if check_claude_authentication():
-            elapsed = time.time() - start_time
-            print(f"\n✅ Authentication verified! (took {elapsed:.1f}s, {attempts} checks)", file=sys.stderr)
-            return {"authenticated": True}
-
-        # Print progress dot
-        print(".", end="", flush=True, file=sys.stderr)
-        time.sleep(poll_interval)
-
-    print(f"\n\n❌ Authentication timeout after {timeout}s", file=sys.stderr)
-    return {
-        "authenticated": False,
-        "error": f"User did not complete authentication within {timeout} seconds"
-    }
-
-
-def run_setup_script(script_path):
-    """Execute tool setup script (e.g., OAuth flow)"""
-    try:
-        mounted_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
-        container_path = os.path.join(BASE_DIR, script_path)
-
-        if os.path.exists(mounted_path):
-            script_full_path = mounted_path
-        elif os.path.exists(container_path):
-            script_full_path = container_path
-        else:
-            return {
-                "error": f"Setup script not found",
-                "tried_paths": [mounted_path, container_path]
-            }
-
-        os.chmod(script_full_path, 0o755)
-
-        print(f"\n🔐 Running authentication setup: {script_full_path}\n", file=sys.stderr)
-
-        result = subprocess.run(
-            ["bash", script_full_path],
-            timeout=300
-        )
-
+        
         if result.returncode == 0:
             return {
                 "status": "success",
-                "message": "Authentication setup completed"
+                "message": "✅ Claude Assistant authenticated and ready!\n\n🎯 You can now assign tasks for autonomous execution.",
+                "stdout": result.stdout
             }
         else:
             return {
-                "error": "Authentication setup failed",
-                "exit_code": result.returncode
+                "status": "error",
+                "message": f"❌ Authentication failed: {result.stderr}",
+                "stdout": result.stdout,
+                "returncode": result.returncode
             }
-
+            
     except subprocess.TimeoutExpired:
-        return {"error": "Authentication setup timed out"}
+        return {
+            "status": "error",
+            "message": "⏱️ Authentication timed out after 5 minutes. Please try again."
+        }
     except Exception as e:
-        return {"error": f"Setup script execution failed: {e}"}
+        return {
+            "status": "error",
+            "message": f"❌ Failed to run setup: {str(e)}"
+        }
 
 
 def find_tool_location(tool_name):
@@ -413,48 +359,25 @@ def unlock_marketplace_tool(tool_name, cost):
             "details": register_result["error"]
         }
 
-    # Run setup script if specified
+    # Handle setup script if specified
     if "setup_script" in tool_config:
         print(f"\n⚙️  {tool_config.get('label', tool_name)} requires authentication setup...\n", file=sys.stderr)
 
+        # Run the setup script
         setup_result = run_setup_script(tool_config["setup_script"])
 
-        if "error" in setup_result:
-            print(f"\n❌ Authentication setup script failed!\n", file=sys.stderr)
-            print(f"Error: {setup_result['error']}\n", file=sys.stderr)
+        # Return the result
+        return {
+            "status": setup_result["status"],
+            "tool": tool_name,
+            "type": "marketplace",
+            "label": tool_config.get("label", tool_name),
+            "credits_remaining": ledger["referral_credits"],
+            "unlock_message": setup_result["message"],
+            "post_unlock_nudge": tool_config.get("post_unlock_nudge", "")
+        }
 
-            if "tried_paths" in setup_result:
-                print(f"Tried locations:", file=sys.stderr)
-                for path in setup_result["tried_paths"]:
-                    print(f"  - {path}", file=sys.stderr)
-
-            return {
-                "status": "error",
-                "error": "Tool unlocked but authentication setup failed",
-                "setup_error": setup_result["error"],
-                "message": f"❌ {tool_config.get('label', tool_name)} unlocked but authentication failed.\n\n"
-                          f"The tool is registered but cannot be used until authentication completes.\n\n"
-                          f"Please run the setup script manually.",
-                "unlock_message": tool_config.get("unlock_message", "")
-            }
-
-        # Wait for authentication to complete
-        print(f"\n🔍 Verifying authentication status...", file=sys.stderr)
-        auth_result = wait_for_authentication(timeout=300, poll_interval=5)
-
-        if not auth_result.get('authenticated'):
-            return {
-                "status": "error",
-                "error": "Authentication timeout",
-                "message": f"❌ {tool_config.get('label', tool_name)} authentication not completed.\n\n"
-                          f"{auth_result.get('error', 'User did not complete authentication.')}\n\n"
-                          f"Please run the authentication setup again.",
-                "unlock_message": tool_config.get("unlock_message", "")
-            }
-
-        print(f"\n✅ {tool_config.get('label', tool_name)} authenticated and ready!\n", file=sys.stderr)
-
-    # Build success response
+    # No setup required - standard unlock
     response = {
         "status": "success",
         "tool": tool_name,
