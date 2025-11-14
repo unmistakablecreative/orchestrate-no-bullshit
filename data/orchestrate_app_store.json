@@ -44,7 +44,7 @@
       "label": "Claude Assistant",
       "description": "AUTONOMOUS TASK EXECUTION - Assign complex tasks (code rewrites, refactoring, doc generation) and Claude executes them while you sleep. Requires: Claude Pro/Team subscription (uses your existing plan, no API costs). One-time auth setup. Wake up to completed work. 🤯",
       "priority": 5,
-      "referral_unlock_cost": 5,
+      "referral_unlock_cost": 3,
       "requires_credentials": false,
       "requires_subscription": true,
       "subscription_type": "Claude Pro or Team",
