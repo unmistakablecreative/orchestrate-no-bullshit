@@ -166,7 +166,13 @@ def register_tool_actions(tool_name):
         sys.path.insert(0, BASE_DIR)
         from system_settings import add_tool
 
-        result = add_tool({"tool_name": tool_name, "script_path": tool_script})
+        # Tool is being unlocked, so register as unlocked with no cost
+        result = add_tool({
+            "tool_name": tool_name, 
+            "script_path": tool_script,
+            "locked": False,  # Just unlocked
+            "referral_unlock_cost": 0  # Already paid
+        })
         return result
 
     except Exception as e:
