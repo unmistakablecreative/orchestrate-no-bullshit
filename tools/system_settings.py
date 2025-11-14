@@ -166,41 +166,112 @@ def save_registry(entries):
 
 
 def extract_actions_from_script(tool_script_path):
-    """Extract actions from tool script by looking for ACTIONS dict"""
+    """
+    Extract actions from tool script
+
+    Supports both:
+    1. Legacy ACTIONS dict (for backward compatibility)
+    2. Refactored main() if/elif router (gold standard)
+    """
+    import ast
+    import re
+
     try:
+        # Try loading module first for ACTIONS dict (backward compatibility)
         spec = importlib.util.spec_from_file_location("tool_module", tool_script_path)
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        if not hasattr(module, 'ACTIONS'):
-            return {"error": "Tool script has no ACTIONS dictionary"}
+        # Check for legacy ACTIONS dict
+        if hasattr(module, 'ACTIONS'):
+            actions_dict = module.ACTIONS
+            actions = []
 
-        actions_dict = module.ACTIONS
+            for action_name, action_func in actions_dict.items():
+                sig = inspect.signature(action_func)
+                params = []
+
+                for param_name, param in sig.parameters.items():
+                    param_info = {
+                        "name": param_name,
+                        "required": param.default == inspect.Parameter.empty
+                    }
+
+                    if param.annotation != inspect.Parameter.empty:
+                        param_info["type"] = param.annotation.__name__
+
+                    params.append(param_info)
+
+                description = action_func.__doc__ or f"Execute {action_name}"
+                description = description.strip().split('\n')[0]
+
+                actions.append({
+                    "action": action_name,
+                    "description": description,
+                    "parameters": params
+                })
+
+            return {"status": "success", "actions": actions}
+
+        # No ACTIONS dict - parse main() function for refactored tools
+        with open(tool_script_path, 'r') as f:
+            content = f.read()
+
+        tree = ast.parse(content)
+
+        # Find main() function
+        main_func = None
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef) and node.name == 'main':
+                main_func = node
+                break
+
+        if not main_func:
+            return {"error": "No ACTIONS dict or main() function found"}
+
+        # Extract action names from if/elif chain
         actions = []
-        
-        for action_name, action_func in actions_dict.items():
-            sig = inspect.signature(action_func)
-            params = []
+        action_pattern = re.compile(r"args\.action\s*==\s*['\"]([a-zA-Z0-9_]+)['\"]")
 
-            for param_name, param in sig.parameters.items():
-                param_info = {
-                    "name": param_name,
-                    "required": param.default == inspect.Parameter.empty
-                }
-                
-                if param.annotation != inspect.Parameter.empty:
-                    param_info["type"] = param.annotation.__name__
-                
-                params.append(param_info)
+        for node in ast.walk(main_func):
+            if isinstance(node, ast.Compare):
+                # Convert node back to source to check pattern
+                try:
+                    line = ast.get_source_segment(content, node)
+                    match = action_pattern.search(line)
+                    if match:
+                        action_name = match.group(1)
 
-            description = action_func.__doc__ or f"Execute {action_name}"
-            description = description.strip().split('\n')[0]
+                        # Try to find function with this name in module
+                        if hasattr(module, action_name):
+                            action_func = getattr(module, action_name)
+                            sig = inspect.signature(action_func)
+                            params = []
 
-            actions.append({
-                "action": action_name,
-                "description": description,
-                "parameters": params
-            })
+                            for param_name, param in sig.parameters.items():
+                                param_info = {
+                                    "name": param_name,
+                                    "required": param.default == inspect.Parameter.empty
+                                }
+
+                                if param.annotation != inspect.Parameter.empty:
+                                    param_info["type"] = param.annotation.__name__
+
+                                params.append(param_info)
+
+                            description = action_func.__doc__ or f"Execute {action_name}"
+                            description = description.strip().split('\n')[0]
+
+                            actions.append({
+                                "action": action_name,
+                                "description": description,
+                                "parameters": params
+                            })
+                except:
+                    pass
+
+        if not actions:
+            return {"error": "No actions extracted from main() function"}
 
         return {"status": "success", "actions": actions}
 
