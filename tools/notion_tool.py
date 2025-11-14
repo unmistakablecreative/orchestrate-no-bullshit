@@ -91,6 +91,15 @@ def search(params):
     res.raise_for_status()
     return res.json()
 
+# Action registry for execution_hub
+ACTIONS = {
+    "create_page": create_page,
+    "create_database": create_database,
+    "update_page": update_page,
+    "append_block_children": append_block_children,
+    "search": search
+}
+
 # --- Entrypoint ---
 def main():
     import argparse

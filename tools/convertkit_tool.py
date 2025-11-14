@@ -105,6 +105,20 @@ def create_subscriber(params):
     return response.json()
 
 
+
+# Action registry for execution_hub
+ACTIONS = {
+        "create_broadcast": create_broadcast,
+        "get_broadcast": get_broadcast,
+        "update_broadcast": update_broadcast,
+        "list_broadcasts": list_broadcasts,
+        "get_current_account": get_current_account,
+        "get_email_stats": get_email_stats,
+        "get_growth_stats": get_growth_stats,
+        "create_subscriber": create_subscriber,
+        "get_broadcast_stats": get_broadcast_stats  # 🆕 Added
+    }
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("action")

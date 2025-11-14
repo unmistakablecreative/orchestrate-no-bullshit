@@ -125,6 +125,19 @@ def batch_archive_emails(message_ids):
     return {'status': 'success', 'archived': success_ids, 'failed': error_ids, 'count': len(message_ids)}
 
 
+
+# Action registry for execution_hub
+ACTIONS = {
+        'check_email': check_email,
+        'send_email': send_email,
+        'open_message': open_message,
+        'search_messages': search_messages,
+        'list_folders': list_folders,
+        'create_folder': create_folder,
+        'archive_email': archive_email,
+        'batch_archive_emails': batch_archive_emails,
+    }
+
 def main():
     import argparse
     parser = argparse.ArgumentParser()
