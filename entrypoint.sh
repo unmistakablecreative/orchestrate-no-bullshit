@@ -95,7 +95,9 @@ fi
 
 RUNTIME_DIR="/opt/orchestrate-core-runtime"
 if [ ! -d "$RUNTIME_DIR/.git" ]; then
-  git clone https://github.com/unmistakablecreative/orchestrate-core-runtime.git "$RUNTIME_DIR"
+  git clone https://github.com/unmistakablecreative/orchestrate-no-bullshit.git "$RUNTIME_DIR"
+else
+  cd "$RUNTIME_DIR" && git pull
 fi
 
 mkdir -p "$RUNTIME_DIR/data"
