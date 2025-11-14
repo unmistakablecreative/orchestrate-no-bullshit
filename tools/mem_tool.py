@@ -16,6 +16,18 @@ import requests
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "tools", "credentials.json")
 API_BASE = "https://api.mem.ai/v2"
+
+
+def load_credential(key):
+    try:
+        with open(CREDENTIALS_PATH, "r") as f:
+            return json.load(f).get(key)
+    except Exception:
+        return None
+
+
+mem_api_key = load_credential("mem_api_key")
+
 HEADERS = {
     "Content-Type": "application/json",
     "Authorization": f"Bearer {mem_api_key}"

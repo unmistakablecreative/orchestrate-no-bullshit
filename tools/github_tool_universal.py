@@ -15,7 +15,6 @@ from typing import List
 
 
 CREDENTIAL_PATH = os.path.join(os.path.dirname(__file__), "credentials.json")
-GITHUB_TOKEN = load_credential("github_access_token")
 
 
 def load_credential(key):
@@ -24,6 +23,9 @@ def load_credential(key):
             return json.load(f).get(key)
     except Exception:
         return None
+
+
+GITHUB_TOKEN = load_credential("github_access_token")
 
 
 def run_git(command: List[str], path: str):
