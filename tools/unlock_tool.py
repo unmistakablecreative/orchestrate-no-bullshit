@@ -158,7 +158,7 @@ def sync_to_jsonbin(user_id, ledger):
 def register_tool_actions(tool_name):
     """Register tool actions in system_settings.ndjson"""
     try:
-        tool_script = os.path.join(BASE_DIR, "tools", f"{tool_name}.py")
+        tool_script = os.path.join(BASE_DIR, f"{tool_name}.py")
 
         if not os.path.exists(tool_script):
             return {"error": f"Tool script not found: {tool_script}"}
