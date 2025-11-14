@@ -18,7 +18,7 @@ import subprocess
 import shutil
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-SYSTEM_REGISTRY = os.path.join(BASE_DIR, "system_settings.ndjson")
+SYSTEM_REGISTRY = os.path.join(os.path.dirname(BASE_DIR), "system_settings.ndjson")
 TOOLS_DIR = os.path.join(BASE_DIR, "tools")
 CREDENTIALS_FILE = os.path.join(TOOLS_DIR, "credentials.json")
 
