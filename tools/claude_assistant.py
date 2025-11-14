@@ -1870,6 +1870,32 @@ def get_task_context(params):
         }
 
 
+# Action registry for execution_hub
+ACTIONS = {
+    'assign_task': assign_task,
+    'batch_assign_tasks': batch_assign_tasks,
+    'check_task_status': check_task_status,
+    'get_task_result': get_task_result,
+    'get_task_results': get_task_results,
+    'get_recent_tasks': get_recent_tasks,
+    'get_all_results': get_all_results,
+    'ask_claude': ask_claude,
+    'cancel_task': cancel_task,
+    'update_task': update_task,
+    'process_queue': process_queue,
+    'execute_queue': execute_queue,
+    'mark_task_in_progress': mark_task_in_progress,
+    'log_task_completion': log_task_completion,
+    'capture_token_telemetry': capture_token_telemetry,
+    'add_to_memory': add_to_memory,
+    'get_working_memory': get_working_memory,
+    'clear_working_memory': clear_working_memory,
+    'archive_thread_logs': archive_thread_logs,
+    'infer_task_type': infer_task_type,
+    'get_task_context': get_task_context
+}
+
+
 def main():
     """Main entry point"""
     import argparse
