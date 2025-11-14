@@ -163,9 +163,15 @@ def add_tool(params):
     Required:
     - tool_name: name of tool
     - script_path: path to tool script (optional, auto-detects from tools/{tool_name}.py)
+    
+    Optional:
+    - locked: whether tool starts locked (default: False)
+    - referral_unlock_cost: cost to unlock (default: 0)
     """
     tool_name = params.get("tool_name")
     script_path = params.get("script_path")
+    locked = params.get("locked", False)  # Default to unlocked
+    cost = params.get("referral_unlock_cost", 0)
 
     if not tool_name:
         return {"status": "error", "message": "Missing required field: tool_name"}
@@ -190,12 +196,15 @@ def add_tool(params):
     # Remove existing entries for this tool
     registry = [entry for entry in registry if entry.get("tool") != tool_name]
 
-    # Add tool header
+    # Add tool header with proper lock status
     registry.append({
         "tool": tool_name,
         "action": "__tool__",
+        "script_path": script_path,
         "description": f"{tool_name} tool",
-        "unlocked": True
+        "locked": locked,
+        "unlocked": not locked,  # Inverse of locked
+        "referral_unlock_cost": cost
     })
 
     # Add actions
@@ -203,6 +212,7 @@ def add_tool(params):
         entry = {
             "tool": tool_name,
             "action": action["action"],
+            "script_path": script_path,
             "description": action["description"]
         }
         
@@ -598,7 +608,7 @@ if __name__ == "__main__":
     params = json.loads(args.params)
 
     if args.action in ACTIONS:
-        result = ACTIONS[args.action](params)
+        result = ACTIONS[action](params)
     else:
         result = {"error": f"Unknown action: {args.action}"}
 
