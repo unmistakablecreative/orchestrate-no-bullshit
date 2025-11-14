@@ -1,10 +1,21 @@
-import requests
+#!/usr/bin/env python3
+"""
+Ideogram Tool
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import json
 import argparse
 import os
 
+import requests
+
+
 CREDENTIALS_FILE = os.path.join(os.path.dirname(__file__), "credentials.json")
 IDEOGRAM_URL = "https://api.ideogram.ai/generate"
+
 
 def load_api_key():
     if os.path.exists(CREDENTIALS_FILE):
@@ -12,6 +23,7 @@ def load_api_key():
             creds = json.load(f)
         return creds.get("ideogram_api_key")
     return None
+
 
 def generate_image(params):
     api_key = load_api_key()
@@ -42,27 +54,35 @@ def generate_image(params):
     except json.JSONDecodeError:
         return {"status": "error", "message": "Invalid JSON response from Ideogram."}
 
+
 def run(params):
     action = params.get("action")
     if action == "generate_image":
         return generate_image(params)
     return {"status": "error", "message": f"Unknown action '{action}'."}
 
+
 def main():
-    parser = argparse.ArgumentParser(description="Ideogram Tool")
-    parser.add_argument("action", help="Action to perform")
-    parser.add_argument("--params", type=str, required=True, help="JSON-encoded parameters")
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-    try:
-        params_dict = json.loads(args.params)
-    except json.JSONDecodeError:
-        print(json.dumps({"status": "error", "message": "Invalid JSON format."}, indent=4))
-        return
+    if args.action == 'generate_image':
+        result = generate_image(params)
+    elif args.action == 'load_api_key':
+        result = load_api_key()
+    elif args.action == 'run':
+        result = run(params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
-    params_dict["action"] = args.action
-    result = run(params_dict)
-    print(json.dumps(result, indent=4))
+    print(json.dumps(result, indent=2))
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

@@ -1,3 +1,10 @@
+#!/usr/bin/env python3
+"""
+Json Manager
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
 import sys
 import json
 import os
@@ -186,24 +193,6 @@ def update_json_entry(params):
     return {'status': 'error', 'message': '❌ Entry not found.'}
 
 
-def update_json_entry(params):
-    filename = os.path.basename(params['filename'])
-    entry_key = params['entry_key']
-    new_data = params['new_data']
-    filepath = os.path.join(os.getcwd(), 'data', filename)
-    if not os.path.exists(filepath):
-        return {'status': 'error', 'message': '❌ File not found.'}
-    with open(filepath, 'r', encoding='utf-8') as f:
-        data = json.load(f)
-    if entry_key in data.get('entries', {}):
-        data['entries'][entry_key].update(new_data)
-        with open(filepath, 'w', encoding='utf-8') as f:
-            json.dump(data, f, indent=4)
-        return {'status': 'success', 'message':
-            f"✅ Entry '{entry_key}' updated."}
-    return {'status': 'error', 'message': '❌ Entry not found.'}
-
-
 def read_json_entry(params):
     filename = os.path.basename(params['filename'])
     entry_key = params['entry_key']
@@ -254,24 +243,47 @@ def create_json_file(params):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Orchestrate JSON Manager')
-    parser.add_argument('action', help='Action to perform')
-    parser.add_argument('--params', type=str, required=False, help=
-        'JSON-encoded parameters for the action')
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
-    try:
-        params = json.loads(args.params) if args.params else {}
-    except json.JSONDecodeError:
-        print(json.dumps({'status': 'error', 'message':
-            '❌ Invalid JSON format.'}, indent=4))
-        return
-    try:
-        func = getattr(sys.modules[__name__], args.action)
-        result = func(params)
-    except AttributeError:
-        result = {'status': 'error', 'message':
-            f'❌ Unknown action: {args.action}'}
-    print(json.dumps(result, indent=4))
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'add_field_to_json_entry':
+        result = add_field_to_json_entry(params)
+    elif args.action == 'add_json_entry':
+        result = add_json_entry(params)
+    elif args.action == 'batch_add_field_to_json_entries':
+        result = batch_add_field_to_json_entries(params)
+    elif args.action == 'batch_delete_json_entries':
+        result = batch_delete_json_entries(params)
+    elif args.action == 'batch_update_json_entries':
+        result = batch_update_json_entries(params)
+    elif args.action == 'create_json_file':
+        result = create_json_file(params)
+    elif args.action == 'create_json_file_from_template':
+        result = create_json_file_from_template(params)
+    elif args.action == 'delete_json_entry':
+        result = delete_json_entry(params)
+    elif args.action == 'insert_json_entry_from_template':
+        result = insert_json_entry_from_template(params)
+    elif args.action == 'list_json_entries':
+        result = list_json_entries(params)
+    elif args.action == 'read_json_entry':
+        result = read_json_entry(params)
+    elif args.action == 'read_json_file':
+        result = read_json_file(params)
+    elif args.action == 'search_json_entries':
+        result = search_json_entries(params)
+    elif args.action == 'update_json_entry':
+        result = update_json_entry(params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
 
 
 if __name__ == '__main__':

@@ -1,9 +1,20 @@
+#!/usr/bin/env python3
+"""
+Notion Tool
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
 import json
+
 import requests
+
 
 NOTION_VERSION = "2022-02-22"
 CREDENTIALS_FILE = "credentials.json"
+
 
 def get_headers():
     path = os.path.join(os.path.dirname(__file__), CREDENTIALS_FILE)
@@ -17,6 +28,7 @@ def get_headers():
         "Content-Type": "application/json",
         "Notion-Version": NOTION_VERSION
     }
+
 
 def create_page(params):
     title = params.get("title")
@@ -46,6 +58,7 @@ def create_page(params):
     res.raise_for_status()
     return res.json()
 
+
 def create_database(params):
     parent_page_id = params.get("parent_page_id")
     title = params.get("title")
@@ -64,6 +77,7 @@ def create_database(params):
     res.raise_for_status()
     return res.json()
 
+
 def update_page(params):
     page_id = params.get("page_id")
     properties = params.get("properties")
@@ -74,6 +88,7 @@ def update_page(params):
     res = requests.patch(f"https://api.notion.com/v1/pages/{page_id}", headers=get_headers(), json={"properties": properties})
     res.raise_for_status()
     return res.json()
+
 
 def append_block_children(params):
     block_id = params.get("block_id")
@@ -86,48 +101,40 @@ def append_block_children(params):
     res.raise_for_status()
     return res.json()
 
+
 def search(params):
     res = requests.post("https://api.notion.com/v1/search", headers=get_headers(), json=params)
     res.raise_for_status()
     return res.json()
 
-# Action registry for execution_hub
-ACTIONS = {
-    "create_page": create_page,
-    "create_database": create_database,
-    "update_page": update_page,
-    "append_block_children": append_block_children,
-    "search": search
-}
 
-# --- Entrypoint ---
 def main():
     import argparse
+    import json
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("action")
-    parser.add_argument("--params", type=str, required=True)
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-    try:
-        params = json.loads(args.params)
-    except:
-        print(json.dumps({"status": "error", "message": "❌ Invalid JSON in --params"}))
-        return
-
-    if args.action == "create_page":
-        out = create_page(params)
-    elif args.action == "create_database":
-        out = create_database(params)
-    elif args.action == "update_page":
-        out = update_page(params)
-    elif args.action == "append_block_children":
-        out = append_block_children(params)
-    elif args.action == "search":
-        out = search(params)
+    if args.action == 'append_block_children':
+        result = append_block_children(params)
+    elif args.action == 'create_database':
+        result = create_database(params)
+    elif args.action == 'create_page':
+        result = create_page(params)
+    elif args.action == 'get_headers':
+        result = get_headers()
+    elif args.action == 'search':
+        result = search(params)
+    elif args.action == 'update_page':
+        result = update_page(params)
     else:
-        out = {"status": "error", "message": f"Unknown action {args.action}"}
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
-    print(json.dumps(out, indent=2))
+    print(json.dumps(result, indent=2))
 
-if __name__ == "__main__":
+
+if __name__ == '__main__':
     main()

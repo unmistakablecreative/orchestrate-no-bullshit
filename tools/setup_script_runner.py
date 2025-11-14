@@ -1,13 +1,11 @@
 #!/usr/bin/env python3
 """
-Setup Script Runner - Isolated helper for running tool setup scripts
+Setup Script Runner
 
-Handles execution of setup scripts for marketplace tools that require
-authentication or configuration (e.g., Claude Assistant OAuth flow).
-
-Keeps unlock_tool.py clean by isolating all setup script logic here.
+Auto-refactored by refactorize.py to match gold standard structure.
 """
 
+import json
 import os
 import sys
 import subprocess
@@ -72,11 +70,23 @@ def run_setup_script(script_path):
         }
 
 
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python3 setup_script_runner.py <script_path>")
-        sys.exit(1)
-
+def main():
+    import argparse
     import json
-    result = run_setup_script(sys.argv[1])
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'run_setup_script':
+        result = run_setup_script(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

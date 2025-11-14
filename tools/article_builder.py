@@ -1,3 +1,11 @@
+#!/usr/bin/env python3
+"""
+Article Builder
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
 import json
 
@@ -51,22 +59,6 @@ def write_article_to_file(filename):
     return {"status": "success", "path": output_path}
 
 
-
-def main(params):
-    action = params.pop("action", None)  # ✅ Strip 'action' before dispatch
-    if action in action_map:
-        return action_map[action](**params)
-    else:
-        return {"status": "error", "message": f"Unknown action '{action}'"}
-
-# ➕ Required for Orchestrate dispatch and CLI
-action_map = {
-    "create_article_blueprint": create_article_blueprint,
-    "add_blog_section": add_blog_section,
-    "assemble_article": assemble_article,
-    "write_article_to_file": write_article_to_file
-}
-
 def cli():
     import argparse, json
     parser = argparse.ArgumentParser()
@@ -84,8 +76,31 @@ def cli():
     print(json.dumps(result, indent=2))
 
 
-if __name__ == "__main__":
-    cli()
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'add_blog_section':
+        result = add_blog_section(**params)
+    elif args.action == 'assemble_article':
+        result = assemble_article(**params)
+    elif args.action == 'cli':
+        result = cli()
+    elif args.action == 'create_article_blueprint':
+        result = create_article_blueprint(**params)
+    elif args.action == 'write_article_to_file':
+        result = write_article_to_file(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
 
 
-
+if __name__ == '__main__':
+    main()

@@ -1,11 +1,19 @@
+#!/usr/bin/env python3
+"""
+Buffer Engine
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import json
+import os
+
 import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from requests_oauthlib import OAuth1Session
-import os
 
-# --- Core Functions ---
 
 def load_credential(key):
     try:
@@ -16,7 +24,6 @@ def load_credential(key):
         return creds.get(key)
     except Exception:
         return None
-
 
 
 def post_to_platform(params):
@@ -48,6 +55,7 @@ def post_to_platform(params):
         return {"status": "success", "message": "✅ Tweet posted successfully", "data": response.json()}
     except Exception as e:
         return {"status": "error", "message": "❌ Twitter API error", "error": str(e)}
+
 
 def buffer_loop():
     while True:
@@ -103,21 +111,28 @@ def buffer_loop():
 
         time.sleep(60)
 
-# --- Action Router ---
 
-if __name__ == "__main__":
+def main():
     import argparse
+    import json
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("action")
-    parser.add_argument("--params")
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
 
-    if args.action == "buffer_loop":
+    if args.action == 'buffer_loop':
         result = buffer_loop()
-    elif args.action == "post_to_platform":
+    elif args.action == 'load_credential':
+        result = load_credential(**params)
+    elif args.action == 'post_to_platform':
         result = post_to_platform(params)
     else:
-        result = {"status": "error", "message": f"Unknown action {args.action}"}
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

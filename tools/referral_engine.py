@@ -1,19 +1,29 @@
+#!/usr/bin/env python3
+"""
+Referral Engine
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
 import json
+import subprocess
+
 import time
 import shutil
-import subprocess
 from zipfile import ZipFile
 from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 import threading
 
-# 🛠 Config
+
 BASE_DIR = '/opt/orchestrate-core-runtime/referral_base'
 TEMP_DIR = '/tmp/referral_build'
 OUTPUT_DIR = '/opt/orchestrate-core-runtime/app'
 WATCH_PATH = '/opt/orchestrate-core-runtime/data'
-NETLIFY_SITE = '36144ab8-5036-40bf-837e-c678a5da2be0'  # Netlify Site ID
+NETLIFY_SITE = '36144ab8-5036-40bf-837e-c678a5da2be0'
+
 
 def build_and_deploy_zip(referrer_id, name, email):
     import requests
@@ -129,41 +139,6 @@ def build_and_deploy_zip(referrer_id, name, email):
         print(f"❌ Exception sending webhook: {e}")
 
 
-
-class ReferralHandler(FileSystemEventHandler):
-    def on_modified(self, event):
-        if event.src_path.endswith('referrals.json'):
-            try:
-                with open(event.src_path) as f:
-                    data = json.load(f)
-                    entries = data.get("entries", {})
-
-                updated = False
-                for key, value in entries.items():
-                    status = value.get("status", "queued").strip().lower()
-                    if status != "queued":
-                        continue
-
-                    name = value.get('name', 'Unknown User')
-                    email = value.get('email', 'demo@example.com')
-                    build_and_deploy_zip(key, name, email)
-
-                    data["entries"][key]["status"] = "processed"
-                    updated = True
-
-                if updated:
-                    with open(event.src_path, 'w') as out:
-                        json.dump(data, out, indent=2)
-
-            except Exception as e:
-                print(f"❌ Failed to process referrals.json: {e}")
-
-
-
-
-
-
-
 def start_referral_watcher():
     observer = Observer()
     handler = ReferralHandler()
@@ -181,8 +156,28 @@ def start_referral_watcher():
 
     thread = threading.Thread(target=monitor, daemon=True)
     thread.start()
-    monitor()  # ✅ BLOCK the main thread so it doesn't exit
+    monitor()
 
 
-if __name__ == "__main__":
-    start_referral_watcher()
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'build_and_deploy_zip':
+        result = build_and_deploy_zip(**params)
+    elif args.action == 'start_referral_watcher':
+        result = start_referral_watcher()
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

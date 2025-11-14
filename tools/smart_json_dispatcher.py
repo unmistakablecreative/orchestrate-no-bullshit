@@ -1,6 +1,16 @@
+#!/usr/bin/env python3
+"""
+Smart Json Dispatcher
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
-import datetime
 from tools import json_manager
+
+import datetime
+
 
 def resolve_nested_key_path(data, key_path):
     keys = str(key_path).split('.')
@@ -8,6 +18,7 @@ def resolve_nested_key_path(data, key_path):
     for k in keys[:-1]:
         ref = ref.setdefault(k, {})
     return ref, keys[-1]
+
 
 def orchestrate_write(filename, entry_key, entry_data, strategy="smart"):
     filename = str(filename)
@@ -49,3 +60,27 @@ def orchestrate_write(filename, entry_key, entry_data, strategy="smart"):
         }
     except Exception as e:
         return {"error": f"❌ Failed to write: {e}"}
+
+
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'orchestrate_write':
+        result = orchestrate_write(**params)
+    elif args.action == 'resolve_nested_key_path':
+        result = resolve_nested_key_path(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

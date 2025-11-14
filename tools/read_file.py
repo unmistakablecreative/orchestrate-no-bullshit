@@ -1,15 +1,26 @@
+#!/usr/bin/env python3
+"""
+Read File
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
 import json
 import argparse
+
 import pdfplumber
 import docx
 import pandas as pd
 from bs4 import BeautifulSoup
 
+
 ALLOWED_DIRS = {
     'dropzone': '/orchestrate_user/dropzone',
     'system_docs': '/opt/orchestrate-core-runtime/system_docs'
 }
+
 
 def extract_pdf(path):
     try:
@@ -18,6 +29,7 @@ def extract_pdf(path):
     except Exception as e:
         return f"❌ PDF read error: {str(e)}"
 
+
 def extract_docx(path):
     try:
         doc = docx.Document(path)
@@ -25,12 +37,14 @@ def extract_docx(path):
     except Exception as e:
         return f"❌ DOCX read error: {str(e)}"
 
+
 def extract_csv(path):
     try:
         df = pd.read_csv(path)
         return df.to_string(index=False)
     except Exception as e:
         return f"❌ CSV read error: {str(e)}"
+
 
 def extract_html(path):
     try:
@@ -40,12 +54,14 @@ def extract_html(path):
     except Exception as e:
         return f"❌ HTML read error: {str(e)}"
 
+
 def extract_text(path):
     try:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
         return f"❌ Text read error: {str(e)}"
+
 
 def read_file(params):
     folder = params.get('folder', 'dropzone')
@@ -90,24 +106,34 @@ def read_file(params):
         'data': content
     }
 
+
 def main():
+    import argparse
+    import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument('action')
-    parser.add_argument('--params', type=str)
+    parser.add_argument('--params')
     args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-    try:
-        params = json.loads(args.params) if args.params else {}
-    except json.JSONDecodeError:
-        print(json.dumps({'status': 'error', 'message': '❌ Invalid JSON.'}, indent=4))
-        return
-
-    if args.action == 'read_file':
+    if args.action == 'extract_csv':
+        result = extract_csv(**params)
+    elif args.action == 'extract_docx':
+        result = extract_docx(**params)
+    elif args.action == 'extract_html':
+        result = extract_html(**params)
+    elif args.action == 'extract_pdf':
+        result = extract_pdf(**params)
+    elif args.action == 'extract_text':
+        result = extract_text(**params)
+    elif args.action == 'read_file':
         result = read_file(params)
     else:
-        result = {'status': 'error', 'message': f'❌ Unknown action: {args.action}'}
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
-    print(json.dumps(result, indent=4))
+    print(json.dumps(result, indent=2))
+
 
 if __name__ == '__main__':
     main()

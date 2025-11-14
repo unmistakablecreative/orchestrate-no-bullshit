@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 """
-Unlock Tool - Unified Version
+Unlock Tool
 
-Handles unlocking of both:
-1. Pre-installed tools (already in system_settings.ndjson, just need to be marked unlocked)
-2. Marketplace tools (in orchestrate_app_store.json, need to be registered)
-
-Single action intelligently routes based on where tool is found.
+Auto-refactored by refactorize.py to match gold standard structure.
 """
 
 import os
 import sys
 import json
 import subprocess
+
 import requests
 from datetime import datetime
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_DIR = os.path.dirname(BASE_DIR)
@@ -22,8 +20,6 @@ APP_STORE_PATH = os.path.join(RUNTIME_DIR, "data", "orchestrate_app_store.json")
 REFERRAL_PATH = "/container_state/referrals.json"
 IDENTITY_PATH = "/container_state/system_identity.json"
 SYSTEM_REGISTRY = os.path.join(RUNTIME_DIR, "system_settings.ndjson")
-
-# JSONBin config
 JSONBIN_ID = "68292fcf8561e97a50162139"
 JSONBIN_KEY = "$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C"
 
@@ -225,6 +221,15 @@ def unlock_preinstalled_tool(tool_name, cost):
     # Check if already unlocked
     unlocked_tools = ledger.get("tools_unlocked", [])
     if tool_name in unlocked_tools:
+        # Special handling for claude_assistant - return auth instructions
+        if tool_name == "claude_assistant":
+            return {
+                "status": "already_unlocked",
+                "message": "✅ claude_assistant is already unlocked",
+                "auth_required": True,
+                "auth_instructions": "🔐 AUTHENTICATION REQUIRED:\n\nRun this command in the container to authenticate:\n\n/home/orchestrate/.local/bin/claude auth login\n\nThis will provide a URL to complete OAuth authentication.\nAfter authentication, Claude Code can execute autonomous tasks."
+            }
+
         return {
             "status": "already_unlocked",
             "message": f"✅ {tool_name} is already unlocked"
@@ -431,57 +436,53 @@ def get_credits_balance():
     }
 
 
-# Action registry for execution_hub
-ACTIONS = {
-    "unlock_tool": unlock_tool,
-    "list_marketplace_tools": list_marketplace_tools,
-    "get_credits_balance": get_credits_balance
-}
+def main():
+    import argparse
+    import json
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-def execute_action(action, params):
-    """Execute unlock tool action"""
-    if action not in ACTIONS:
-        return {"error": f"Unknown action: {action}"}
-
-    try:
-        # Handle both dict params and direct tool_name string
-        if isinstance(params, dict):
-            tool_name = params.get("tool_name")
-        else:
-            tool_name = params
-
-        if action == "unlock_tool":
-            return unlock_tool(tool_name)
-        else:
-            return ACTIONS[action](**params if isinstance(params, dict) else {})
-    except Exception as e:
-        return {"error": f"Action execution failed: {e}"}
-
-
-if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: unlock_tool.py <action> [tool_name]")
-        print("Actions: unlock_tool, list_marketplace_tools, get_credits_balance")
-        sys.exit(1)
-
-    action = sys.argv[1]
-
-    if action == "unlock_tool":
-        if len(sys.argv) < 3:
-            print("Usage: unlock_tool.py unlock_tool <tool_name>")
-            sys.exit(1)
-        result = unlock_tool(sys.argv[2])
-        print(json.dumps(result, indent=2))
-
-    elif action == "list_marketplace_tools":
-        result = list_marketplace_tools()
-        print(json.dumps(result, indent=2))
-
-    elif action == "get_credits_balance":
+    if args.action == 'find_tool_location':
+        result = find_tool_location(**params)
+    elif args.action == 'get_credits_balance':
         result = get_credits_balance()
-        print(json.dumps(result, indent=2))
-
+    elif args.action == 'get_user_id':
+        result = get_user_id()
+    elif args.action == 'list_marketplace_tools':
+        result = list_marketplace_tools()
+    elif args.action == 'load_app_store':
+        result = load_app_store()
+    elif args.action == 'load_local_ledger':
+        result = load_local_ledger()
+    elif args.action == 'load_registry':
+        result = load_registry()
+    elif args.action == 'register_tool_actions':
+        result = register_tool_actions(**params)
+    elif args.action == 'run_setup_script':
+        result = run_setup_script(**params)
+    elif args.action == 'save_local_ledger':
+        result = save_local_ledger(**params)
+    elif args.action == 'save_registry':
+        result = save_registry(**params)
+    elif args.action == 'sync_from_jsonbin':
+        result = sync_from_jsonbin()
+    elif args.action == 'sync_to_jsonbin':
+        result = sync_to_jsonbin(**params)
+    elif args.action == 'unlock_marketplace_tool':
+        result = unlock_marketplace_tool(**params)
+    elif args.action == 'unlock_preinstalled_tool':
+        result = unlock_preinstalled_tool(**params)
+    elif args.action == 'unlock_tool':
+        result = unlock_tool(**params)
     else:
-        print(f"Unknown action: {action}")
-        sys.exit(1)
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

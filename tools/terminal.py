@@ -1,9 +1,15 @@
+#!/usr/bin/env python3
+"""
+Terminal
 
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
+import json
 import os
 import subprocess
 
-
-# --- Core Functions ---
 
 def run_terminal_command(command):
     import subprocess
@@ -13,6 +19,7 @@ def run_terminal_command(command):
         return {"status": "success", "output": result}
     except subprocess.CalledProcessError as e:
         return {"status": "error", "message": e.output.strip()}
+
 
 def run_script_file(path):
     import subprocess
@@ -27,6 +34,7 @@ def run_script_file(path):
     except subprocess.CalledProcessError as e:
         return {"status": "error", "message": e.output.strip()}
 
+
 def stream_terminal_output(command):
     import subprocess
     
@@ -38,6 +46,7 @@ def stream_terminal_output(command):
     
     return {"status": "success", "output": output.strip()}
 
+
 def sanitize_command(command):
     dangerous = ["rm -rf", "shutdown", "reboot", ":(){:|:&};:", "mkfs"]
     
@@ -45,6 +54,7 @@ def sanitize_command(command):
         return {"status": "error", "message": "❌ Unsafe command blocked."}
     
     return {"status": "success", "message": "✅ Command is safe."}
+
 
 def get_last_n_lines_of_output(command, n):
     import subprocess
@@ -55,6 +65,7 @@ def get_last_n_lines_of_output(command, n):
         return {"status": "success", "output": "\n".join(lines[-int(n):])}
     except subprocess.CalledProcessError as e:
         return {"status": "error", "message": e.output.strip()}
+
 
 def list_directory_contents(path):
     import os
@@ -69,29 +80,33 @@ def list_directory_contents(path):
         return {"status": "error", "message": str(e)}
 
 
+def main():
+    import argparse
+    import json
 
-# --- Action Router ---
-if __name__ == "__main__":
-    import argparse, json
     parser = argparse.ArgumentParser()
-    parser.add_argument("action")
-    parser.add_argument("--params")
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
 
-    if args.action == "run_terminal_command":
-        result = run_terminal_command(**params)
-    elif args.action == "script":
-        result = run_script_file(**params)
-    elif args.action == "stream":
-        result = stream_terminal_output(**params)
-    elif args.action == "check_safe":
-        result = sanitize_command(**params)
-    elif args.action == "tail":
+    if args.action == 'get_last_n_lines_of_output':
         result = get_last_n_lines_of_output(**params)
-    elif args.action == "ls":
+    elif args.action == 'list_directory_contents':
         result = list_directory_contents(**params)
+    elif args.action == 'run_script_file':
+        result = run_script_file(**params)
+    elif args.action == 'run_terminal_command':
+        result = run_terminal_command(**params)
+    elif args.action == 'sanitize_command':
+        result = sanitize_command(**params)
+    elif args.action == 'stream_terminal_output':
+        result = stream_terminal_output(**params)
     else:
-        result = {"status": "error", "message": f"Unknown action {args.action}"}
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

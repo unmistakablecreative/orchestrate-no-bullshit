@@ -1,5 +1,15 @@
+#!/usr/bin/env python3
+"""
+Media Manager
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
+import json
 import os
 import subprocess
+
 from PIL import Image
 import yt_dlp
 import onnxruntime
@@ -108,27 +118,30 @@ def convert_file(filename, from_format, to_format):
 
 
 def main():
-    import argparse, json
+    import argparse
+    import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument('action')
     parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
-    if args.action == 'convert_media':
-        result = convert_media(**params)
-    elif args.action == 'remove_background':
-        result = remove_background(**params)
-    elif args.action == 'download_youtube':
-        result = download_youtube(**params)
-    elif args.action == 'resize_image':
-        result = resize_image(**params)
-    elif args.action == 'compress_image':
+
+    if args.action == 'compress_image':
         result = compress_image(**params)
     elif args.action == 'convert_file':
         result = convert_file(**params)
+    elif args.action == 'convert_media':
+        result = convert_media(**params)
+    elif args.action == 'download_youtube':
+        result = download_youtube(**params)
+    elif args.action == 'remove_background':
+        result = remove_background(**params)
+    elif args.action == 'resize_image':
+        result = resize_image(**params)
     else:
-        result = {'status': 'error', 'message': f'Unknown action {args.action}'
-            }
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
     print(json.dumps(result, indent=2))
 
 

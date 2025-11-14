@@ -1,31 +1,25 @@
 #!/usr/bin/env python3
 """
-System Settings Manager
+System Settings
 
-Core functions:
-- Credential management (set/get API keys)
-- Tool registration (add/remove tools and actions)
-- Runtime refresh (pull updates, preserve user data)
-- Memory file tracking
+Auto-refactored by refactorize.py to match gold standard structure.
 """
 
 import os
 import sys
 import json
+import subprocess
+
 import importlib.util
 import inspect
-import subprocess
 import shutil
+
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SYSTEM_REGISTRY = os.path.join(os.path.dirname(BASE_DIR), "system_settings.ndjson")
-TOOLS_DIR = os.path.join(BASE_DIR, "tools")
-CREDENTIALS_FILE = os.path.join(TOOLS_DIR, "credentials.json")
+TOOLS_DIR = BASE_DIR
+CREDENTIALS_FILE = os.path.join(BASE_DIR, "credentials.json")
 
-
-# ============================================================================
-# CREDENTIAL MANAGEMENT
-# ============================================================================
 
 def load_credential(key):
     """Load a credential from credentials.json"""
@@ -59,39 +53,97 @@ def save_credential(key, value):
 
 def set_credential(params):
     """
-    Set a credential for a tool
-    
+    Set a credential for a tool by parsing the script to auto-detect required keys
+
     Required:
-    - tool_name: name of tool (e.g., "outline_editor")
+    - script_path: path to tool script (e.g., "tools/outline_editor.py")
     - value: credential value
-    
+
     Example:
-    {"tool_name": "outline_editor", "value": "sk-outline-abc123"}
+    {"script_path": "tools/outline_editor.py", "value": "sk-outline-abc123"}
+
+    The function parses the script to find load_credential() calls and extracts
+    the actual key names, then saves the credential with those exact keys.
     """
-    tool_name = params.get("tool_name")
+    import re
+
     value = params.get("value")
+    script_path = params.get("script_path")
 
-    if not tool_name or not value:
-        return {"status": "error", "message": "Missing required fields: tool_name, value"}
+    if not value:
+        return {"status": "error", "message": "❌ Missing 'value' in params"}
+    if not script_path:
+        return {"status": "error", "message": "❌ Missing 'script_path' in params"}
 
-    # Credential key format: {tool_name}_api_key
-    key = f"{tool_name}_api_key"
-    
-    result = save_credential(key, value)
-    
-    if "error" in result:
-        return result
+    # Handle both absolute and relative paths
+    if not os.path.isabs(script_path):
+        script_path = os.path.join(os.getcwd(), script_path)
+
+    if not os.path.exists(script_path):
+        return {"status": "error", "message": f"❌ Script not found: {script_path}"}
+
+    expected_keys = set()
+
+    try:
+        with open(script_path, "r", encoding="utf-8") as f:
+            content = f.read()
+
+        # Targeted pattern matching - catch credential access patterns
+        patterns = [
+            # load_credential("key") or load_credential('key')
+            r'load_credential\([\'"]([a-zA-Z0-9_]{3,40})[\'"]\)',
+
+            # creds.get("key") or creds.get('key')
+            r'creds\.get\([\'"]([a-zA-Z0-9_]{3,40})[\'"]\)',
+
+            # creds["key"] or creds['key']
+            r'creds\[[\'"]([a-zA-Z0-9_]{3,40})[\'"]\]',
+        ]
+
+        for pattern in patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            for match in matches:
+                if match and len(match) >= 5:
+                    # Filter out overly generic single-word keys
+                    if match.lower() not in ['api_key', 'token', 'secret', 'access_token', 'key', 'value', 'creds', 'credential']:
+                        # If it has an underscore OR ends with common suffixes, it's valid
+                        if '_' in match or any(match.lower().endswith(suffix) for suffix in ['_api_key', '_token', '_secret', '_key', 'api_key', 'token', 'secret']):
+                            expected_keys.add(match)
+
+    except Exception as e:
+        return {"status": "error", "message": f"❌ Failed to parse script: {str(e)}"}
+
+    if not expected_keys:
+        return {
+            "status": "error",
+            "message": "❌ No credential keys found in script. Supported patterns: load_credential(), creds.get(), creds[]"
+        }
+
+    # Inject into credentials.json
+    creds_path = CREDENTIALS_FILE
+
+    creds = {}
+    if os.path.exists(creds_path):
+        try:
+            with open(creds_path, "r") as f:
+                creds = json.load(f)
+        except:
+            creds = {}
+
+    # Set all found keys to the same value
+    for key in expected_keys:
+        creds[key] = value
+
+    with open(creds_path, "w") as f:
+        json.dump(creds, f, indent=2)
 
     return {
         "status": "success",
-        "message": f"Credential set for {tool_name}",
-        "key": key
+        "keys_set": list(expected_keys),
+        "credentials_file": creds_path,
+        "message": f"✅ Credential injected into: {', '.join(expected_keys)}"
     }
 
-
-# ============================================================================
-# REGISTRY MANAGEMENT
-# ============================================================================
 
 def load_registry():
     """Load system_settings.ndjson as list of entries"""
@@ -381,10 +433,6 @@ def list_supported_actions(params):
     }
 
 
-# ============================================================================
-# MEMORY FILE TRACKING
-# ============================================================================
-
 def add_memory_file(params):
     """
     Add a file to memory tracking
@@ -503,10 +551,6 @@ def build_working_memory(params):
     }
 
 
-# ============================================================================
-# RUNTIME REFRESH
-# ============================================================================
-
 def refresh_runtime(params):
     """
     Pull latest updates from repo while preserving user data
@@ -566,50 +610,55 @@ def refresh_runtime(params):
         return {"error": f"Runtime refresh failed: {e}"}
 
 
-# ============================================================================
-# ACTION REGISTRY
-# ============================================================================
-
-ACTIONS = {
-    "set_credential": set_credential,
-    "add_tool": add_tool,
-    "remove_tool": remove_tool,
-    "add_action": add_action,
-    "remove_action": remove_action,
-    "list_tools": list_tools,
-    "list_supported_actions": list_supported_actions,
-    "add_memory_file": add_memory_file,
-    "remove_memory_file": remove_memory_file,
-    "list_memory_files": list_memory_files,
-    "build_working_memory": build_working_memory,
-    "refresh_runtime": refresh_runtime
-}
-
-
-def execute_action(action, params):
-    """Execute system_settings action"""
-    if action not in ACTIONS:
-        return {"error": f"Unknown action: {action}"}
-    
-    try:
-        return ACTIONS[action](params)
-    except Exception as e:
-        return {"error": f"Action execution failed: {e}"}
-
-
-if __name__ == "__main__":
+def main():
     import argparse
+    import json
 
     parser = argparse.ArgumentParser()
-    parser.add_argument('action', help='Action to perform')
-    parser.add_argument('--params', type=str, help='JSON params', default='{}')
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-    params = json.loads(args.params)
-
-    if args.action in ACTIONS:
-        result = ACTIONS[action](params)
+    if args.action == 'add_action':
+        result = add_action(params)
+    elif args.action == 'add_memory_file':
+        result = add_memory_file(params)
+    elif args.action == 'add_tool':
+        result = add_tool(params)
+    elif args.action == 'build_working_memory':
+        result = build_working_memory(params)
+    elif args.action == 'extract_actions_from_script':
+        result = extract_actions_from_script(**params)
+    elif args.action == 'list_memory_files':
+        result = list_memory_files(params)
+    elif args.action == 'list_supported_actions':
+        result = list_supported_actions(params)
+    elif args.action == 'list_tools':
+        result = list_tools(params)
+    elif args.action == 'load_credential':
+        result = load_credential(**params)
+    elif args.action == 'load_registry':
+        result = load_registry()
+    elif args.action == 'refresh_runtime':
+        result = refresh_runtime(params)
+    elif args.action == 'remove_action':
+        result = remove_action(params)
+    elif args.action == 'remove_memory_file':
+        result = remove_memory_file(params)
+    elif args.action == 'remove_tool':
+        result = remove_tool(params)
+    elif args.action == 'save_credential':
+        result = save_credential(**params)
+    elif args.action == 'save_registry':
+        result = save_registry(**params)
+    elif args.action == 'set_credential':
+        result = set_credential(params)
     else:
-        result = {"error": f"Unknown action: {args.action}"}
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

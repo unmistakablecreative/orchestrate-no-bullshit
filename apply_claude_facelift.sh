@@ -4,7 +4,7 @@
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE_DIR="$SCRIPT_DIR/claude_config_template"
-CLAUDE_DIR="/root/.claude"
+CLAUDE_DIR="/home/orchestrate/.claude"
 
 echo "🎨 Applying Orchestrate Claude Code configuration..."
 

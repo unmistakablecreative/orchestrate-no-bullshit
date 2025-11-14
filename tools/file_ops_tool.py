@@ -1,16 +1,26 @@
+#!/usr/bin/env python3
+"""
+File Ops Tool
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
 import os
 import sys
 import json
 import subprocess
+
 import pdfplumber
 import docx
 import pandas as pd
 from bs4 import BeautifulSoup
 
+
 BASE_DIRECTORIES = [
     "/orchestrate_user/dropzone",
     "/opt/orchestrate-core-runtime/system_docs"
 ]
+
 
 def find_file(filename_fragment):
     matches = []
@@ -37,12 +47,14 @@ def find_file(filename_fragment):
             "error": f"No file matching '{filename_fragment}' found in known directories."
         }
 
+
 def extract_pdf(path):
     try:
         with pdfplumber.open(path) as pdf:
             return '\n'.join(page.extract_text() or '' for page in pdf.pages)
     except Exception as e:
         return f"❌ PDF read error: {str(e)}"
+
 
 def extract_docx(path):
     try:
@@ -51,12 +63,14 @@ def extract_docx(path):
     except Exception as e:
         return f"❌ DOCX read error: {str(e)}"
 
+
 def extract_csv(path):
     try:
         df = pd.read_csv(path)
         return df.to_string(index=False)
     except Exception as e:
         return f"❌ CSV read error: {str(e)}"
+
 
 def extract_html(path):
     try:
@@ -66,12 +80,14 @@ def extract_html(path):
     except Exception as e:
         return f"❌ HTML read error: {str(e)}"
 
+
 def extract_text(path):
     try:
         with open(path, 'r', encoding='utf-8') as f:
             return f.read()
     except Exception as e:
         return f"❌ Text read error: {str(e)}"
+
 
 def read_file(filename_fragment):
     match = find_file(filename_fragment)
@@ -98,35 +114,36 @@ def read_file(filename_fragment):
         "content": content
     }
 
+
 def main():
-    try:
-        action = sys.argv[1]
-        params = {}
+    import argparse
+    import json
 
-        if "--params" in sys.argv:
-            idx = sys.argv.index("--params")
-            raw = sys.argv[idx + 1]
-            params = json.loads(raw)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-        filename = params.get("filename")
-        destination_dir = params.get("destination_dir")
-        new_name = params.get("new_name")
+    if args.action == 'extract_csv':
+        result = extract_csv(**params)
+    elif args.action == 'extract_docx':
+        result = extract_docx(**params)
+    elif args.action == 'extract_html':
+        result = extract_html(**params)
+    elif args.action == 'extract_pdf':
+        result = extract_pdf(**params)
+    elif args.action == 'extract_text':
+        result = extract_text(**params)
+    elif args.action == 'find_file':
+        result = find_file(**params)
+    elif args.action == 'read_file':
+        result = read_file(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
-        if action == "find_file":
-            print(json.dumps(find_file(filename)))
-        elif action == "read_file":
-            print(json.dumps(read_file(filename)))
-        elif action == "rename_file":
-            print(json.dumps(rename_file(filename, new_name)))
-        elif action == "move_file":
-            print(json.dumps(move_file(filename, destination_dir)))
-        else:
-            print(json.dumps({"error": f"Unknown action '{action}'"}))
-
-    except Exception as e:
-        print(json.dumps({"error": str(e)}))
+    print(json.dumps(result, indent=2))
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()
-

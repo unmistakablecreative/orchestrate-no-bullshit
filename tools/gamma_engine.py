@@ -1,12 +1,20 @@
 #!/usr/bin/env python3
+"""
+Gamma Engine
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
 import json
 import argparse
+
 import requests
 import time
 from datetime import datetime
 
-# === CONFIG ===
+
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "tools", "credentials.json")
 CONFIG_PATH = os.path.join(BASE_DIR, "data", "presentation_config.json")
@@ -15,7 +23,7 @@ EXPORT_DIR = os.path.join(BASE_DIR, "exports")
 GAMMA_ENDPOINT = "https://public-api.gamma.app/v0.2/generations"
 GAMMA_POLL_ENDPOINT = "https://public-api.gamma.app/v0.2/generations/{}"
 
-# === HELPERS ===
+
 def load_api_key():
     try:
         with open(CREDENTIALS_PATH, "r") as f:
@@ -24,12 +32,14 @@ def load_api_key():
     except Exception:
         return ""
 
+
 def load_config():
     try:
         with open(CONFIG_PATH, "r") as f:
             return json.load(f)
     except Exception as e:
         return {"status": "error", "message": f"❌ Failed to load config: {e}"}
+
 
 def load_input_text():
     try:
@@ -38,11 +48,13 @@ def load_input_text():
     except Exception as e:
         return {"status": "error", "message": f"❌ Failed to read input text: {e}"}
 
+
 def extract_title(text):
     for line in text.splitlines():
         if line.strip():
             return line.strip()
     return "untitled_" + datetime.now().strftime("%Y%m%d_%H%M%S")
+
 
 def save_file_from_url(file_url, filename):
     try:
@@ -54,6 +66,7 @@ def save_file_from_url(file_url, filename):
         return file_path
     except Exception as e:
         return f"❌ Failed to download file: {e}"
+
 
 def poll_until_ready(gamma_id, timeout=90, interval=5):
     poll_url = GAMMA_POLL_ENDPOINT.format(gamma_id)
@@ -69,7 +82,7 @@ def poll_until_ready(gamma_id, timeout=90, interval=5):
             time.sleep(interval)
     return None
 
-# === MAIN FUNCTION ===
+
 def create_gamma_deck():
     config = load_config()
     if isinstance(config, dict) and config.get("status") == "error":
@@ -129,7 +142,7 @@ def create_gamma_deck():
 
     print(json.dumps(final_output, indent=2))
 
-# === CONFIG MODIFIER ===
+
 def modify_config(filename="presentation_config.json", field=None, value=None):
     config_path = os.path.join(BASE_DIR, "data", filename)
     try:
@@ -155,21 +168,38 @@ def modify_config(filename="presentation_config.json", field=None, value=None):
 
     print(json.dumps(config, indent=2))
 
-# === ENTRYPOINT ===
+
 def main():
+    import argparse
+    import json
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["create_gamma_deck", "modify_config"])
-    parser.add_argument("--field")
-    parser.add_argument("--value")
-    parser.add_argument("--config")
-    parser.add_argument("--params", help=argparse.SUPPRESS)
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
 
-    if args.command == "create_gamma_deck":
-        create_gamma_deck()
-    elif args.command == "modify_config":
-        fname = args.config or "presentation_config.json"
-        modify_config(fname, args.field, args.value)
+    if args.action == 'create_gamma_deck':
+        result = create_gamma_deck()
+    elif args.action == 'extract_title':
+        result = extract_title(**params)
+    elif args.action == 'load_api_key':
+        result = load_api_key()
+    elif args.action == 'load_config':
+        result = load_config()
+    elif args.action == 'load_input_text':
+        result = load_input_text()
+    elif args.action == 'modify_config':
+        result = modify_config(**params)
+    elif args.action == 'poll_until_ready':
+        result = poll_until_ready(**params)
+    elif args.action == 'save_file_from_url':
+        result = save_file_from_url(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
-if __name__ == "__main__":
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
     main()

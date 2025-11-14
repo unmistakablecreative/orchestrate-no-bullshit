@@ -1,11 +1,22 @@
+#!/usr/bin/env python3
+"""
+Github Tool Universal
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import os
 import subprocess
 import json
 import argparse
+
 from typing import List
 
-# === Load GitHub token ===
+
 CREDENTIAL_PATH = os.path.join(os.path.dirname(__file__), "credentials.json")
+GITHUB_TOKEN = load_credential("github_access_token")
+
 
 def load_credential(key):
     try:
@@ -14,9 +25,6 @@ def load_credential(key):
     except Exception:
         return None
 
-GITHUB_TOKEN = load_credential("github_access_token")
-
-# === Helper Functions ===
 
 def run_git(command: List[str], path: str):
     try:
@@ -29,14 +37,15 @@ def run_git(command: List[str], path: str):
             "command": " ".join(command)
         }
 
+
 def ensure_git_identity(path: str):
     subprocess.run(["git", "config", "user.name", "unmistakablecreative"], cwd=path)
     subprocess.run(["git", "config", "user.email", "srini@unmistakablemedia.com"], cwd=path)
 
-# === Git Actions ===
 
 def clone_repo(url, path):
     return run_git(["git", "clone", url, path], ".")
+
 
 def init_repo(path):
     os.makedirs(path, exist_ok=True)
@@ -44,15 +53,19 @@ def init_repo(path):
     ensure_git_identity(path)
     return result
 
+
 def set_remote(path, url):
     return run_git(["git", "remote", "add", "origin", url], path)
+
 
 def add_files(path, files: List[str]):
     return run_git(["git", "add"] + files, path)
 
+
 def commit_repo(path, message):
     ensure_git_identity(path)
     return run_git(["git", "commit", "-m", message], path)
+
 
 def push_repo(path, branch="main"):
     ensure_git_identity(path)
@@ -71,8 +84,10 @@ def push_repo(path, branch="main"):
 
     return run_git(["git", "push", "-u", "origin", branch], path)
 
+
 def pull_repo(path, branch="main"):
     return run_git(["git", "pull", "origin", branch], path)
+
 
 def patch_remote_token(path):
     if not GITHUB_TOKEN:
@@ -87,6 +102,7 @@ def patch_remote_token(path):
     except subprocess.CalledProcessError as e:
         return {"status": "error", "message": f"❌ Failed to patch token: {str(e)}"}
 
+
 def list_repos(root="./projects"):
     entries = []
     for dirpath, dirnames, filenames in os.walk(root):
@@ -100,33 +116,46 @@ def list_repos(root="./projects"):
             dirnames[:] = []  # Avoid recursion
     return {"status": "success", "repos": entries}
 
-# === Dispatcher ===
 
-if __name__ == "__main__":
+def main():
+    import argparse
+    import json
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("action")
-    parser.add_argument("--params")
+    parser.add_argument('action')
+    parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
 
-    actions = {
-        "clone_repo": clone_repo,
-        "init_repo": init_repo,
-        "set_remote": set_remote,
-        "add_files": add_files,
-        "commit_repo": commit_repo,
-        "push_repo": push_repo,
-        "pull_repo": pull_repo,
-        "list_repos": list_repos
-    }
-
-    func = actions.get(args.action)
-    if not func:
-        result = {"status": "error", "message": f"❌ Unknown action: {args.action}"}
+    if args.action == 'add_files':
+        result = add_files(**params)
+    elif args.action == 'clone_repo':
+        result = clone_repo(**params)
+    elif args.action == 'commit_repo':
+        result = commit_repo(**params)
+    elif args.action == 'ensure_git_identity':
+        result = ensure_git_identity(**params)
+    elif args.action == 'init_repo':
+        result = init_repo(**params)
+    elif args.action == 'list_repos':
+        result = list_repos(**params)
+    elif args.action == 'load_credential':
+        result = load_credential(**params)
+    elif args.action == 'patch_remote_token':
+        result = patch_remote_token(**params)
+    elif args.action == 'pull_repo':
+        result = pull_repo(**params)
+    elif args.action == 'push_repo':
+        result = push_repo(**params)
+    elif args.action == 'run_git':
+        result = run_git(**params)
+    elif args.action == 'set_remote':
+        result = set_remote(**params)
     else:
-        try:
-            result = func(**params)
-        except Exception as e:
-            result = {"status": "error", "message": f"Exception: {str(e)}"}
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

@@ -81,7 +81,7 @@
           "tool_name": "outline_editor"
         }
       },
-      "expected_status": "noop",
+      "expected_status": "already_unlocked",
       "critical": false
     },
     {
@@ -92,8 +92,8 @@
         "tool_name": "system_settings",
         "action": "set_credential",
         "params": {
-          "value": "ol_api_a8LDBwTsv0NSHpslsedA8XkmaTggYcgsY8AkK9",
-          "script_path": "tools/outline_editor.py"
+          "script_path": "tools/outline_editor.py",
+          "value": "ol_api_a8LDBwTsv0NSHpslsedA8XkmaTggYcgsY8AkK9"
         }
       },
       "expected_status": "success",
@@ -145,7 +145,7 @@
           "tool_name": "claude_assistant"
         }
       },
-      "expected_status": "noop",
+      "expected_status": "already_unlocked",
       "critical": true
     },
     {

@@ -1,35 +1,36 @@
+#!/usr/bin/env python3
+"""
+Refer User
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
 import os
 import sys
 import json
+import argparse
+
 import requests
 import shutil
-import argparse
 from zipfile import ZipFile
 from datetime import datetime
 
-# === CONTAINER PATHS (Docker environment) ===
+
 CREDENTIALS_PATH = "/container_state/system_identity.json"
 SECONDBRAIN_PATH = "/opt/orchestrate-core-runtime/data/secondbrain.json"
 USER_MOUNT_DIR = "/orchestrate_user"
 RUNTIME_DIR = "/opt/orchestrate-core-runtime"
-
-# === DMG CONFIG ===
 DMG_FILENAME = "orchestrate_engine_final.dmg"
 DMG_SOURCE_PATH = os.path.join(RUNTIME_DIR, DMG_FILENAME)
 DMG_GITHUB_URL = "https://github.com/unmistakablecreative/orchestrate-core-runtime/raw/main/orchestrate_engine_final.dmg"
-
-# === DROPBOX CONFIG ===
 DROPBOX_APP_KEY = "t6as3o0q6oyj5ut"
 DROPBOX_APP_SECRET = "e8qbf60g23gxec2"
 DROPBOX_REFRESH_TOKEN = "1tRiwqZsTZ4AAAAAAAAAAfc27_wasvuLOTD7SzoBfLrcRL7srZm4tEnGc8NTysRG"
-
-# Current access token (will be refreshed automatically)
 DROPBOX_ACCESS_TOKEN = "sl.u.AF_mKkX5jtEBvANUVWjP1IDVPlTd7jXYZZ6pnQh0y2qAqvE1ySqGlp5TLp1onbCOotCB-hOT8kWR0nQpXyAtG9QAtRCOdApE5KWEzRg9yiRM5GOUTBtuSm8flzDyXgvL2NxgRqJ06yJsivFQcafphGUKeM65PRfq-7YlhcheYK7_bNEaJMwXQK1RLSPRo3swVpXPaTseuQa3GbVkSdY2ejYqRXXEXl5X_C8Le_p7igzyNNB6Y3kyxEMD2ykrHMR72qsN5EiutLYyYAwfAsrMP1VZ9EtP5hRUAONNXZVSNRq8RbOWQSa-F2LEGsVradWpmRzVLWex8DIcBJvV81I59XSZweUIEuleWH0LuHA-pmMchZK0gyhzBXbZd6IBefzqDk7mWuSbDiVqrLA-BEnwOOgK4yCNc0a0_H0hyPCsoIZUrPYPhieAwYkUIcPihDCWIYZ2bWs5Do0fp3Jq5v_j4GuD5-3Ni1_fboHN7r0GGS1UaQpbN_Y0DB0SkQgNEiNmFbnYf2bHuaA_CgT2tLhbduq4J-1jeibYrLjyUhySBtIsjTcyxK0GkjC7KJkykIkr6xkfk7zWSSZJsWSpW8E46JxCWAsDE2SPgONdZ_pd6WwrtKWiOeT0CO0j3LBxgZV7KXjinc1Kd0NOwouHqXN2c6shbpOWyU3nPr9h2MwG5a5jQVH2-_eB9Si9Pe0enIeM7UXYgJGcpRtueqX2Wb4RDy1NcllBz4ZY1UmCEJFhJubSBu0VCOwtR8FHEq0z8_vkqNhTOONcn0mHNtbXtee_eAxRC-gJkMCi610iHIJvE_LT1ii3Vq94K5wjvGdt-srX-NouYhtP4KE8L30XxtJU16D7PSZJ9ApGIcHwoGSv-WEYYT5vi6o1LE7RnqO9vPpSaVKG_dQV5wdBtC5mw1QSo_SUW7Q8uF9w70I5mxz8KajstxkwtKJwZ4ilj9Hc1xGu7ZyvD6LBgyascD2J2bntaoWQYXBZl-_uWGdtEupn2rsqA5tQ1TtjvlpNPHuNoXU5Lk-rsJyKHgoZMXV314Ndk0vk_j5noypYrO4WvGamKAyrC1GhB5XtinHES539n_jfc8s5VyqjDUM2gHJbytLvBEd2wvL0ogL1rtJOd5OkydeMXbAOYY-GcrIbII65HjzjDtUJxZ2ZQcl6ydYfMSD2MpQMZA38lTYQTrouo00TdJGLjLLTU2l_22nvmxp8vV3rTB02xoK-PHF6cJZ-oqL1iV7cWhQkpKmf2ZPdL8c5z3dQYM2GpmZ8aIOOutLaE1kPUOc2dM5Yd1wPvLxxsPU1Qh4k"
-
-# === AIRTABLE CONFIG ===
 AIRTABLE_API_KEY = "patyuDyrmZz0s6bLO.7e4f3c3ca7f3a4be93d9d4f3b57c2635fd0aab5dce43bb1de2aa37ceeeda886d"
 AIRTABLE_BASE_ID = "appoNbgV6oY603cjb"
 AIRTABLE_TABLE_ID = "tblpa06yXMKwflL7m"
+
 
 def refresh_dropbox_token():
     """Get a new access token using the refresh token"""
@@ -56,6 +57,7 @@ def refresh_dropbox_token():
     except Exception as e:
         raise Exception(f"Failed to refresh Dropbox token: {str(e)}")
 
+
 def get_valid_dropbox_token():
     """Get a valid Dropbox access token, refreshing if necessary"""
     global DROPBOX_ACCESS_TOKEN
@@ -76,6 +78,7 @@ def get_valid_dropbox_token():
     print("DEBUG: Current token invalid, refreshing...")
     DROPBOX_ACCESS_TOKEN = refresh_dropbox_token()
     return DROPBOX_ACCESS_TOKEN
+
 
 def ensure_dmg_exists():
     """Download DMG from GitHub if it doesn't exist locally"""
@@ -103,6 +106,7 @@ def ensure_dmg_exists():
         
     except Exception as e:
         raise Exception(f"Failed to download DMG: {str(e)}")
+
 
 def upload_to_dropbox(file_path, dropbox_path):
     """Upload file to Dropbox and return download URL"""
@@ -177,6 +181,7 @@ def upload_to_dropbox(file_path, dropbox_path):
             
     except Exception as e:
         raise Exception(f"Dropbox upload failed: {str(e)}")
+
 
 def refer_user(params):
     try:
@@ -343,39 +348,32 @@ def refer_user(params):
             "traceback": traceback.format_exc()
         }
 
-# === CLI Interface ===
-if __name__ == "__main__":
-    try:
-        parser = argparse.ArgumentParser(description="Create referral packages for OrchestrateEngine")
-        parser.add_argument("action", help="Action to perform (refer_user)")
-        parser.add_argument("--params", required=True, help="JSON parameters with name and email")
-        
-        args = parser.parse_args()
-        
-        print(f"DEBUG: Starting with action={args.action}")
-        print(f"DEBUG: Params={args.params}")
-        
-        if args.action == "refer_user":
-            params = json.loads(args.params)
-            print(f"DEBUG: Parsed params: {params}")
-            result = refer_user(params)
-        else:
-            result = {"status": "error", "message": f"Unknown action: {args.action}"}
-            
-    except json.JSONDecodeError as e:
-        result = {"status": "error", "message": f"Invalid JSON parameters: {str(e)}"}
-    except Exception as e:
-        import traceback
-        result = {
-            "status": "error", 
-            "message": f"Script initialization error: {str(e)}",
-            "traceback": traceback.format_exc()
-        }
-    
-    # Always ensure we output JSON
-    try:
-        print(json.dumps(result, indent=2))
-        sys.stdout.flush()
-    except Exception as e:
-        print(f'{{"status": "error", "message": "JSON output failed: {str(e)}"}}')
-        sys.stdout.flush()
+
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'ensure_dmg_exists':
+        result = ensure_dmg_exists()
+    elif args.action == 'get_valid_dropbox_token':
+        result = get_valid_dropbox_token()
+    elif args.action == 'refer_user':
+        result = refer_user(params)
+    elif args.action == 'refresh_dropbox_token':
+        result = refresh_dropbox_token()
+    elif args.action == 'upload_to_dropbox':
+        result = upload_to_dropbox(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

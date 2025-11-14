@@ -1,7 +1,16 @@
+#!/usr/bin/env python3
+"""
+Outline Editor
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import json
+import os
+
 import re
 import requests
-import os
 
 
 def resolve_collection_alias(collection_input):
@@ -373,9 +382,6 @@ def delete_collection(collection_id):
     return res.json()
 
 
-
-
-
 def ask_outline_ai(query):
     import requests
     from system_settings import load_credential
@@ -398,50 +404,52 @@ def ask_outline_ai(query):
     return {'status': 'success', 'data': res.json()}
 
 
-
-
 def main():
-    import argparse, json
+    import argparse
+    import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument('action')
     parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
 
-    if args.action == 'create_doc':
-        result = create_doc(params)
-    elif args.action == 'get_doc':
-        result = get_doc(**params)
-    elif args.action == 'update_doc':
-        result = update_doc(params)
-    elif args.action == 'delete_doc':
-        result = delete_doc(**params)
-    elif args.action == 'list_docs':
-        result = list_docs(**params)
-    elif args.action == 'search_docs':
-        result = search_docs(**params)
-    elif args.action == 'get_url':
-        result = get_url(**params)
-    elif args.action == 'patch_section':
-        result = patch_section(**params)
-    elif args.action == 'append_section':
+    if args.action == 'append_section':
         result = append_section(**params)
-    elif args.action == 'export_doc':
-        result = export_doc(params)
-    elif args.action == 'import_doc_from_file':
-        result = import_doc_from_file(**params)
-    elif args.action == 'move_doc':
-        result = move_doc(**params)
-    elif args.action == 'create_collection':
-        result = create_collection(**params)
-    elif args.action == 'get_collection':
-        result = get_collection(**params)
-    elif args.action == 'update_collection':
-        result = update_collection(**params)
-    elif args.action == 'delete_collection':
-        result = delete_collection(**params)
     elif args.action == 'ask_outline_ai':
         result = ask_outline_ai(**params)
+    elif args.action == 'create_collection':
+        result = create_collection(**params)
+    elif args.action == 'create_doc':
+        result = create_doc(params)
+    elif args.action == 'delete_collection':
+        result = delete_collection(**params)
+    elif args.action == 'delete_doc':
+        result = delete_doc(**params)
+    elif args.action == 'export_doc':
+        result = export_doc(params)
+    elif args.action == 'get_collection':
+        result = get_collection(**params)
+    elif args.action == 'get_doc':
+        result = get_doc(**params)
+    elif args.action == 'get_url':
+        result = get_url(**params)
+    elif args.action == 'import_doc_from_file':
+        result = import_doc_from_file(**params)
+    elif args.action == 'list_docs':
+        result = list_docs(**params)
+    elif args.action == 'move_doc':
+        result = move_doc(**params)
+    elif args.action == 'patch_section':
+        result = patch_section(**params)
+    elif args.action == 'resolve_collection_alias':
+        result = resolve_collection_alias(**params)
+    elif args.action == 'search_docs':
+        result = search_docs(**params)
+    elif args.action == 'update_collection':
+        result = update_collection(**params)
+    elif args.action == 'update_doc':
+        result = update_doc(params)
     else:
         result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 

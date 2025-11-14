@@ -1,3 +1,14 @@
+#!/usr/bin/env python3
+"""
+Mash Tool
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import os
+import sys
+import json
+
 import random
 
 
@@ -16,16 +27,23 @@ def spin_game(params):
     return {'status': 'success', 'data': result}
 
 
-if __name__ == '__main__':
-    import argparse, json
+def main():
+    import argparse
+    import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument('action')
     parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
+
     if args.action == 'spin_game':
         result = spin_game(params)
     else:
-        result = {'status': 'error', 'message': f'Unknown action {args.action}'
-            }
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

@@ -1,37 +1,21 @@
+#!/usr/bin/env python3
+"""
+Orchestrate Dispatcher
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
 import sys
 import os
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import json
-import inspect
 import argparse
+
+import inspect
 import importlib
 
 
-def main(params):
-    load_result = load_actions(params)
-    if load_result['status'] != 'success':
-        return load_result
-    batch = load_result['data']
-    if batch.get('status') != 'ready':
-        return {'status': 'error', 'message': '❌ Batch not ready.'}
-    results = []
-    touched_files = set()
-    for i, action in enumerate(batch['actions']):
-        if i > 0:
-            action['params']['_prev_results'] = results
-        dispatch_result = dispatch_action(action)
-        results.append(dispatch_result)
-        try:
-            filename = action['params']['filename']
-            touched_files.add(filename)
-        except KeyError:
-            pass
-    print('\n--- Real File Outputs ---')
-    for filename in touched_files:
-        file_result = read_file(filename)
-        print(f'\n📂 {filename}:')
-        print(json.dumps(file_result.get('content', {}), indent=4))
-    return {'status': 'success', 'results': results}
+DEFAULT_TEMPLATE_DIR = (
+    '/Users/srinivas/Orchestrate Github/orchestrate-jarvis/compositions/')
 
 
 def dispatch_action(params):
@@ -45,10 +29,6 @@ def dispatch_action(params):
         return result
     except Exception as e:
         return {'status': 'error', 'message': f'❌ Dispatch failed: {str(e)}'}
-
-
-DEFAULT_TEMPLATE_DIR = (
-    '/Users/srinivas/Orchestrate Github/orchestrate-jarvis/compositions/')
 
 
 def load_actions(params):
@@ -116,5 +96,29 @@ def cli_main():
     print(json.dumps(result, indent=4))
 
 
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'cli_main':
+        result = cli_main()
+    elif args.action == 'dispatch_action':
+        result = dispatch_action(params)
+    elif args.action == 'load_actions':
+        result = load_actions(params)
+    elif args.action == 'read_file':
+        result = read_file(**params)
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
+    print(json.dumps(result, indent=2))
+
+
 if __name__ == '__main__':
-    cli_main()
+    main()

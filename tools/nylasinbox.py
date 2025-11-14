@@ -1,17 +1,23 @@
+#!/usr/bin/env python3
+"""
+Nylasinbox
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import json
 import os
+
 import time
 import requests
 import markdown2
 
-# Load credentials from file in the same directory
-CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), 'credentials.json')
-with open(CREDENTIALS_PATH, 'r') as f:
-    creds = json.load(f)
 
+CREDENTIALS_PATH = os.path.join(os.path.dirname(__file__), 'credentials.json')
 GRANT_ID = creds['grant_id']
 ACCESS_TOKEN = creds['access_token']
-FOLDER_ID = creds.get('archive_folder_id', 'Label_4287')  # default archive label
+FOLDER_ID = creds.get('archive_folder_id', 'Label_4287')
 
 
 def check_email(page_token=None):
@@ -125,40 +131,32 @@ def batch_archive_emails(message_ids):
     return {'status': 'success', 'archived': success_ids, 'failed': error_ids, 'count': len(message_ids)}
 
 
-
-# Action registry for execution_hub
-ACTIONS = {
-        'check_email': check_email,
-        'send_email': send_email,
-        'open_message': open_message,
-        'search_messages': search_messages,
-        'list_folders': list_folders,
-        'create_folder': create_folder,
-        'archive_email': archive_email,
-        'batch_archive_emails': batch_archive_emails,
-    }
-
 def main():
     import argparse
+    import json
+
     parser = argparse.ArgumentParser()
     parser.add_argument('action')
     parser.add_argument('--params')
     args = parser.parse_args()
     params = json.loads(args.params) if args.params else {}
 
-    action_map = {
-        'check_email': check_email,
-        'send_email': send_email,
-        'open_message': open_message,
-        'search_messages': search_messages,
-        'list_folders': list_folders,
-        'create_folder': create_folder,
-        'archive_email': archive_email,
-        'batch_archive_emails': batch_archive_emails,
-    }
-
-    if args.action in action_map:
-        result = action_map[args.action](**params)
+    if args.action == 'archive_email':
+        result = archive_email(**params)
+    elif args.action == 'batch_archive_emails':
+        result = batch_archive_emails(**params)
+    elif args.action == 'check_email':
+        result = check_email(**params)
+    elif args.action == 'create_folder':
+        result = create_folder(**params)
+    elif args.action == 'list_folders':
+        result = list_folders()
+    elif args.action == 'open_message':
+        result = open_message(**params)
+    elif args.action == 'search_messages':
+        result = search_messages(**params)
+    elif args.action == 'send_email':
+        result = send_email(**params)
     else:
         result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 

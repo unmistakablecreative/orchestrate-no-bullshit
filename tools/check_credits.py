@@ -1,18 +1,29 @@
+#!/usr/bin/env python3
+"""
+Check Credits
+
+Auto-refactored by refactorize.py to match gold standard structure.
+"""
+
+import sys
 import json
-import requests
 import os
 
-# === Config ===
+import requests
+
+
 IDENTITY_PATH = "/container_state/system_identity.json"
 BIN_ID = "68292fcf8561e97a50162139"
 API_KEY = "$2a$10$MoavwaWsCucy2FkU/5ycV.lBTPWoUq4uKHhCi9Y47DOHWyHFL3o2C"
 HEADERS = {"X-Master-Key": API_KEY, "Content-Type": "application/json"}
+
 
 def load_system_id():
     if not os.path.exists(IDENTITY_PATH):
         return None
     with open(IDENTITY_PATH, "r") as f:
         return json.load(f).get("user_id")
+
 
 def check_credits():
     user_id = load_system_id()
@@ -48,6 +59,26 @@ def check_credits():
         "timestamp": user.get("timestamp")
     }
 
-if __name__ == "__main__":
-    result = check_credits()
+
+def main():
+    import argparse
+    import json
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument('action')
+    parser.add_argument('--params')
+    args = parser.parse_args()
+    params = json.loads(args.params) if args.params else {}
+
+    if args.action == 'check_credits':
+        result = check_credits()
+    elif args.action == 'load_system_id':
+        result = load_system_id()
+    else:
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
+
     print(json.dumps(result, indent=2))
+
+
+if __name__ == '__main__':
+    main()

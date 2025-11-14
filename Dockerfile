@@ -42,5 +42,8 @@ USER orchestrate
 # Install Claude Code CLI as non-root user
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
+# Apply Orchestrate Claude Code configuration
+RUN bash /opt/orchestrate-core-runtime/apply_claude_facelift.sh
+
 # Entry handled externally
 ENTRYPOINT ["/bin/bash", "/opt/orchestrate-core-runtime/entrypoint.sh"]

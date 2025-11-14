@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-Claude Assistant - Minimal Core Version
-6 core functions only, no advanced features
+Claude Assistant
+
+Auto-refactored by refactorize.py to match gold standard structure.
 """
 
 import sys
 import json
 import os
 import subprocess
+
 import time
 import requests
 import stat
@@ -27,7 +29,7 @@ def safe_write_queue(queue_file, queue_data):
         json.dump(queue_data, f, indent=2)
 
     if was_readonly:
-        os.chmod(queue_file, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)  # 444
+        os.chmod(queue_file, stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
 
 
 def assign_task(params):
@@ -1060,7 +1062,6 @@ def log_task_completion(params):
     }
 
 
-
 def batch_assign_tasks(params):
     """
     Assign multiple tasks at once.
@@ -1170,6 +1171,7 @@ def batch_assign_tasks(params):
         "details": results,
         "summary": summary
     }
+
 
 def get_task_results(params):
     """
@@ -1870,76 +1872,62 @@ def get_task_context(params):
         }
 
 
-# Action registry for execution_hub
-ACTIONS = {
-    'assign_task': assign_task,
-    'batch_assign_tasks': batch_assign_tasks,
-    'check_task_status': check_task_status,
-    'get_task_result': get_task_result,
-    'get_task_results': get_task_results,
-    'get_recent_tasks': get_recent_tasks,
-    'get_all_results': get_all_results,
-    'ask_claude': ask_claude,
-    'cancel_task': cancel_task,
-    'update_task': update_task,
-    'process_queue': process_queue,
-    'execute_queue': execute_queue,
-    'mark_task_in_progress': mark_task_in_progress,
-    'log_task_completion': log_task_completion,
-    'capture_token_telemetry': capture_token_telemetry,
-    'add_to_memory': add_to_memory,
-    'get_working_memory': get_working_memory,
-    'clear_working_memory': clear_working_memory,
-    'archive_thread_logs': archive_thread_logs,
-    'infer_task_type': infer_task_type,
-    'get_task_context': get_task_context
-}
-
-
 def main():
-    """Main entry point"""
     import argparse
+    import json
 
     parser = argparse.ArgumentParser()
     parser.add_argument('action')
     parser.add_argument('--params')
     args = parser.parse_args()
-
     params = json.loads(args.params) if args.params else {}
 
-    # Route to correct function
-    actions = {
-        'assign_task': assign_task,
-        'batch_assign_tasks': batch_assign_tasks,
-        'check_task_status': check_task_status,
-        'get_task_result': get_task_result,
-        'get_task_results': get_task_results,
-        'get_recent_tasks': get_recent_tasks,
-        'get_all_results': get_all_results,
-        'ask_claude': ask_claude,
-        'cancel_task': cancel_task,
-        'update_task': update_task,
-        'process_queue': process_queue,
-        'execute_queue': execute_queue,
-        'mark_task_in_progress': mark_task_in_progress,
-        'log_task_completion': log_task_completion,
-        'capture_token_telemetry': capture_token_telemetry,
-        'add_to_memory': add_to_memory,
-        'get_working_memory': get_working_memory,
-        'clear_working_memory': clear_working_memory,
-        'archive_thread_logs': archive_thread_logs,
-        'infer_task_type': infer_task_type,
-        'get_task_context': get_task_context
-    }
-
-    if args.action in actions:
-        result = actions[args.action](params)
+    if args.action == 'add_to_memory':
+        result = add_to_memory(params)
+    elif args.action == 'archive_thread_logs':
+        result = archive_thread_logs(params)
+    elif args.action == 'ask_claude':
+        result = ask_claude(params)
+    elif args.action == 'assign_task':
+        result = assign_task(params)
+    elif args.action == 'batch_assign_tasks':
+        result = batch_assign_tasks(params)
+    elif args.action == 'cancel_task':
+        result = cancel_task(params)
+    elif args.action == 'capture_token_telemetry':
+        result = capture_token_telemetry(params)
+    elif args.action == 'check_task_status':
+        result = check_task_status(params)
+    elif args.action == 'clear_working_memory':
+        result = clear_working_memory(params)
+    elif args.action == 'execute_queue':
+        result = execute_queue(params)
+    elif args.action == 'get_all_results':
+        result = get_all_results(params)
+    elif args.action == 'get_recent_tasks':
+        result = get_recent_tasks(params)
+    elif args.action == 'get_task_context':
+        result = get_task_context(params)
+    elif args.action == 'get_task_result':
+        result = get_task_result(params)
+    elif args.action == 'get_task_results':
+        result = get_task_results(params)
+    elif args.action == 'get_working_memory':
+        result = get_working_memory(params)
+    elif args.action == 'infer_task_type':
+        result = infer_task_type(params)
+    elif args.action == 'log_task_completion':
+        result = log_task_completion(params)
+    elif args.action == 'mark_task_in_progress':
+        result = mark_task_in_progress(params)
+    elif args.action == 'process_queue':
+        result = process_queue(params)
+    elif args.action == 'safe_write_queue':
+        result = safe_write_queue(**params)
+    elif args.action == 'update_task':
+        result = update_task(params)
     else:
-        result = {
-            'status': 'error',
-            'message': f'Unknown action: {args.action}',
-            'available_actions': list(actions.keys())
-        }
+        result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
     print(json.dumps(result, indent=2))
 
