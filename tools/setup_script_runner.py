@@ -25,7 +25,7 @@ def run_setup_script(script_path):
     """
     try:
         # Build full path to mounted setup script
-        full_script_path = os.path.join("/orchestrate_user/documents/orchestrate", script_path)
+        full_script_path = os.path.join("/orchestrate_user", script_path)
 
         if not os.path.exists(full_script_path):
             return {

@@ -328,19 +328,15 @@ def unlock_marketplace_tool(tool_name, cost):
 
     # Handle setup script if specified
     if "setup_script" in tool_config:
-        print(f"\n⚙️  {tool_config.get('label', tool_name)} requires authentication setup...\n", file=sys.stderr)
+        setup_script = tool_config["setup_script"]
 
-        # Run the setup script
-        setup_result = run_setup_script(tool_config["setup_script"])
-
-        # Return the result
         return {
-            "status": setup_result["status"],
+            "status": "success",
             "tool": tool_name,
             "type": "marketplace",
             "label": tool_config.get("label", tool_name),
             "credits_remaining": ledger["referral_credits"],
-            "unlock_message": setup_result["message"],
+            "unlock_message": f"✅ {tool_config.get('label', tool_name)} unlocked! ({ledger['referral_credits']} credits remaining)\n\n🔧 Authentication Required - Copy/paste this into Terminal:\n\nbash ~/Documents/Orchestrate/{setup_script}\n\nThis opens your browser for Claude Code OAuth (takes 30 seconds).",
             "post_unlock_nudge": tool_config.get("post_unlock_nudge", "")
         }
 
