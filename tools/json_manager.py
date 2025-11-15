@@ -242,6 +242,55 @@ def create_json_file(params):
     return {'status': 'success', 'message': '✅ File initialized.'}
 
 
+def batch_add_json_entries(params):
+    """Add multiple entries with individual data for each entry"""
+    filename = os.path.basename(params['filename'])
+    entries = params['entries']  # List of entry objects with entry_key + fields
+    filepath = os.path.join(os.getcwd(), 'data', filename)
+
+    if not os.path.exists(filepath):
+        return {"status": "error", "message": "❌ File not found."}
+
+    if not isinstance(entries, list):
+        return {"status": "error", "message": "❌ 'entries' must be a list of entry objects."}
+
+    with open(filepath, 'r', encoding='utf-8') as f:
+        data = json.load(f)
+
+    data.setdefault('entries', {})
+    added_count = 0
+    skipped_count = 0
+
+    for entry in entries:
+        if not isinstance(entry, dict):
+            continue
+
+        entry_key = entry.get('entry_key')
+        if not entry_key:
+            continue
+
+        # Skip if entry already exists
+        if entry_key in data['entries']:
+            skipped_count += 1
+            continue
+
+        # Extract entry data (everything except entry_key)
+        entry_data = {k: v for k, v in entry.items() if k != 'entry_key'}
+
+        if entry_data:  # Only add if there's actual data
+            data['entries'][str(entry_key)] = entry_data
+            added_count += 1
+
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(data, f, indent=4)
+
+    message = f"✅ Added {added_count} entries"
+    if skipped_count > 0:
+        message += f", skipped {skipped_count} existing entries"
+
+    return {"status": "success", "message": message}
+
+
 def main():
     import argparse
     import json
@@ -280,6 +329,8 @@ def main():
         result = search_json_entries(params)
     elif args.action == 'update_json_entry':
         result = update_json_entry(params)
+    elif args.action == 'batch_add_json_entries':
+        result = batch_add_json_entries(params)
     else:
         result = {'status': 'error', 'message': f'Unknown action {args.action}'}
 
