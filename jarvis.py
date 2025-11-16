@@ -344,6 +344,10 @@ def format_toolkit_list(data, limit=50):
     unlocked = [t for t in tools if not t.get("locked", True)]
     locked = [t for t in tools if t.get("locked", True)]
 
+    # Sort unlocked alphabetically, locked by unlock cost (cheapest first)
+    unlocked.sort(key=lambda x: x.get("tool", "").lower())
+    locked.sort(key=lambda x: x.get("referral_unlock_cost", 999))
+
     if unlocked:
         toolkit_output += "**✅ Unlocked Tools:**\n"
         for tool in unlocked[:limit]:
@@ -356,11 +360,11 @@ def format_toolkit_list(data, limit=50):
         toolkit_output += "\n"
 
     if locked:
-        toolkit_output += "**🔒 Locked Tools:**\n"
+        toolkit_output += "**🔒 Locked Tools (sorted by unlock cost):**\n"
         for tool in locked[:limit]:
             name = tool.get("tool", "Unknown")
             cost = tool.get("referral_unlock_cost", "?")
-            toolkit_output += f"• **{name}** (Unlock: {cost} credits)\n"
+            toolkit_output += f"• **{name}** ({cost} credits)\n"
 
     return toolkit_output
 
