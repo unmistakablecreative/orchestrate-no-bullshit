@@ -328,9 +328,9 @@ def format_dashboard_display(data, config):
 
 # Dashboard formatters (beta formatters)
 def format_toolkit_list(data, limit=50):
-    """Format system_settings.ndjson as toolkit display"""
+    """Format system_settings.ndjson as markdown table"""
     if not data:
-        return "🔧 **Your Toolkit:** No tools available"
+        return {"display_table": "No tools available", "tools": []}
 
     # Parse NDJSON - data could be list of objects or raw string
     if isinstance(data, str):
@@ -338,66 +338,60 @@ def format_toolkit_list(data, limit=50):
     elif isinstance(data, list):
         entries = data
     else:
-        return "🔧 **Your Toolkit:** Error loading toolkit"
+        return {"display_table": "Error loading toolkit", "tools": []}
 
     # Filter for actual tools (action: __tool__)
     tools = [e for e in entries if e.get("action") == "__tool__"]
 
     if not tools:
-        return "🔧 **Your Toolkit:** No tools available"
+        return {"display_table": "No tools available", "tools": []}
 
-    toolkit_output = "🔧 **Your Toolkit:**\n\n"
+    # Sort: unlocked alphabetically, locked by cost
+    unlocked = sorted([t for t in tools if not t.get("locked", True)],
+                     key=lambda x: x.get("tool", "").lower())
+    locked = sorted([t for t in tools if t.get("locked", True)],
+                   key=lambda x: x.get("referral_unlock_cost", 999))
 
-    unlocked = [t for t in tools if not t.get("locked", True)]
-    locked = [t for t in tools if t.get("locked", True)]
+    # Build markdown table
+    table = "| Status | Tool | Description | Unlock Cost |\n"
+    table += "|--------|------|-------------|-------------|\n"
 
-    # Sort unlocked alphabetically, locked by unlock cost (cheapest first)
-    unlocked.sort(key=lambda x: x.get("tool", "").lower())
-    locked.sort(key=lambda x: x.get("referral_unlock_cost", 999))
+    for tool in unlocked[:limit]:
+        name = tool.get("tool", "Unknown")
+        desc = tool.get("description", "")[:60]
+        table += f"| ✅ | **{name}** | {desc} | - |\n"
 
-    if unlocked:
-        toolkit_output += "**✅ Unlocked Tools:**\n"
-        for tool in unlocked[:limit]:
-            name = tool.get("tool", "Unknown")
-            desc = tool.get("description", "")
-            toolkit_output += f"• **{name}**"
-            if desc:
-                toolkit_output += f" - {desc[:80]}"
-            toolkit_output += "\n"
-        toolkit_output += "\n"
+    for tool in locked[:limit]:
+        name = tool.get("tool", "Unknown")
+        desc = tool.get("description", "")[:60]
+        cost = tool.get("referral_unlock_cost", "?")
+        table += f"| 🔒 | {name} | {desc} | {cost} credits |\n"
 
-    if locked:
-        toolkit_output += "**🔒 Locked Tools (sorted by unlock cost):**\n"
-        for tool in locked[:limit]:
-            name = tool.get("tool", "Unknown")
-            cost = tool.get("referral_unlock_cost", "?")
-            toolkit_output += f"• **{name}** ({cost} credits)\n"
-
-    return toolkit_output
+    return {"display_table": table, "tools": tools}
 
 def format_app_store_list(data, limit=10):
-    """Format orchestrate_app_store.json as browsable list"""
+    """Format orchestrate_app_store.json as markdown table"""
     if not isinstance(data, dict):
-        return "🏪 **App Store:** Error loading app store"
+        return {"display_table": "Error loading app store", "tools": {}}
 
     entries = data.get("entries", {})
     if not entries:
-        return "🏪 **App Store:** No tools available"
-
-    store_output = "🏪 **App Store - Unlock New Tools:**\n\n"
+        return {"display_table": "No tools available", "tools": {}}
 
     # Sort by priority
     sorted_tools = sorted(entries.items(), key=lambda x: x[1].get("priority", 999))
 
+    # Build markdown table
+    table = "| Tool | Cost | Description |\n"
+    table += "|------|------|-------------|\n"
+
     for tool_name, meta in sorted_tools[:limit]:
         label = meta.get("label", tool_name)
-        desc = meta.get("description", "")[:120]
+        desc = meta.get("description", "")[:80]
         cost = meta.get("referral_unlock_cost", "?")
+        table += f"| **{label}** | {cost} credits | {desc} |\n"
 
-        store_output += f"**{label}** ({cost} credits)\n"
-        store_output += f"  {desc}\n\n"
-
-    return store_output
+    return {"display_table": table, "tools": entries}
 
 # Dashboard formatters (jarvis-local only, not used in beta)
 def format_calendar_events(data):
