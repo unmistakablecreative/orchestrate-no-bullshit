@@ -37,8 +37,9 @@
     "requires_credentials": false
   },
   "ideogram_tool": {
-    "message": "✅ Ideogram Tool unlocked! No setup required - ready to use.",
-    "requires_credentials": false
+    "message": "✅ Ideogram Tool unlocked!\n\n📝 **Setup Required:**\n1. Get your Ideogram API key from https://ideogram.ai/manage-api\n2. Tell the GPT: 'Set my Ideogram API key to [your_key]'\n3. The GPT will save it and you're ready to generate images",
+    "requires_credentials": true,
+    "credential_key": "ideogram_api_key"
   },
   "convertkit_tool": {
     "message": "✅ ConvertKit Tool unlocked! No setup required - ready to use.",
