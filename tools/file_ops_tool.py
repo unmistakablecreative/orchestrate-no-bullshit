@@ -38,13 +38,15 @@ def find_file(filename_fragment):
 
     if matches:
         return {
+            "status": "success",
             "match_count": len(matches),
             "matches": matches,
             "selected": matches[0]
         }
     else:
         return {
-            "error": f"No file matching '{filename_fragment}' found in known directories."
+            "status": "error",
+            "message": f"No file matching '{filename_fragment}' found in known directories."
         }
 
 
@@ -91,9 +93,13 @@ def extract_text(path):
 
 def read_file(filename_fragment):
     match = find_file(filename_fragment)
+
+    if match.get("status") == "error":
+        return match
+
     path = match.get("selected")
     if not path:
-        return {"error": "No matching file found to read."}
+        return {"status": "error", "message": "No matching file found to read."}
 
     ext = os.path.splitext(path)[1].lower()
 
@@ -109,6 +115,7 @@ def read_file(filename_fragment):
         content = extract_text(path)
 
     return {
+        "status": "success",
         "filename": os.path.basename(path),
         "extension": ext,
         "content": content

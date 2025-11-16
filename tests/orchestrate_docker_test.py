@@ -224,6 +224,49 @@ class TestRunner:
 
         return claude_results
 
+    def run_onboarding_tests(self) -> List[Dict[str, Any]]:
+        """Run onboarding sequence validation from onboarding_actions.json"""
+        print(f"\n{Colors.BOLD}Running Onboarding Sequence Tests{Colors.END}")
+        print(f"{Colors.BLUE}Validates all onboarding actions work before GPT interaction{Colors.END}")
+
+        onboarding_results = []
+
+        try:
+            # Load onboarding_actions.json
+            with open('tests/onboarding_actions.json', 'r') as f:
+                onboarding_config = json.load(f)
+
+            self.ngrok_url = onboarding_config.get('ngrok_url')
+            tests = onboarding_config.get('tests', [])
+            cleanup = onboarding_config.get('cleanup', [])
+
+            print(f"  Found {len(tests)} onboarding action tests\n")
+
+            # Run each test
+            for test in tests:
+                # Add step info to output
+                step = test.get('step', 'unknown')
+                validates = test.get('validates', '')
+
+                print(f"{Colors.BLUE}  Step: {step} - {validates}{Colors.END}")
+
+                result = self.run_test(test)
+                result['validates'] = validates
+                result['step'] = step
+                onboarding_results.append(result)
+
+            # Run cleanup
+            if cleanup:
+                print(f"\n{Colors.BLUE}🧹 Cleaning up onboarding test data...{Colors.END}")
+                self.run_cleanup(cleanup)
+
+        except FileNotFoundError:
+            print(f"{Colors.RED}✗ onboarding_actions.json not found{Colors.END}")
+        except Exception as e:
+            print(f"{Colors.RED}✗ Failed to run onboarding tests: {e}{Colors.END}")
+
+        return onboarding_results
+
         # Detailed failures
         if failed > 0:
             print(f"\n{Colors.RED}Failed Tests:{Colors.END}")
@@ -291,7 +334,7 @@ def main():
     )
     parser.add_argument(
         '--tests-file',
-        default='orchestrate_docker_tests.json',
+        default='tests/orchestrate_docker_tests.json',
         help='Path to tests JSON file'
     )
     parser.add_argument(
@@ -299,12 +342,46 @@ def main():
         action='store_true',
         help='Run only critical tests'
     )
+    parser.add_argument(
+        '--onboarding',
+        action='store_true',
+        help='Run onboarding sequence validation tests'
+    )
 
     args = parser.parse_args()
 
     runner = TestRunner(args.tests_file, args.quick)
-    exit_code = runner.run()
 
+    # Run onboarding tests if requested
+    if args.onboarding:
+        onboarding_results = runner.run_onboarding_tests()
+
+        # Print onboarding-specific summary
+        total = len(onboarding_results)
+        passed = sum(1 for r in onboarding_results if r['status'] == 'PASS')
+        failed = total - passed
+        critical_failed = sum(1 for r in onboarding_results if r['status'] == 'FAIL' and r['critical'])
+
+        print(f"\n{'='*60}")
+        print(f"{Colors.BOLD}ONBOARDING TEST RESULTS{Colors.END}")
+        print(f"{'='*60}")
+        print(f"\nTotal Tests:    {total}")
+        print(f"{Colors.GREEN}Passed:         {passed}{Colors.END}")
+        print(f"{Colors.RED}Failed:         {failed}{Colors.END}")
+        print(f"{Colors.RED}Critical Fails: {critical_failed}{Colors.END}")
+
+        if critical_failed > 0:
+            print(f"\n{Colors.RED}{Colors.BOLD}❌ CRITICAL ONBOARDING FAILURES{Colors.END}")
+            sys.exit(1)
+        elif failed > 0:
+            print(f"\n{Colors.YELLOW}{Colors.BOLD}⚠️  SOME ONBOARDING TESTS FAILED{Colors.END}")
+            sys.exit(1)
+        else:
+            print(f"\n{Colors.GREEN}{Colors.BOLD}✅ ALL ONBOARDING TESTS PASSED{Colors.END}")
+            sys.exit(0)
+
+    # Otherwise run standard tests
+    exit_code = runner.run()
     sys.exit(exit_code)
 
 

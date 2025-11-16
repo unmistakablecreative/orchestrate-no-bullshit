@@ -1,0 +1,278 @@
+{
+  "test_suite": "OrchestrateOS Onboarding Sequence Validation",
+  "description": "Programmatic test of onboarding flow with pre-filled user inputs. Validates all actions work before GPT interacts with them.",
+  "ngrok_url": "https://supposedly-faithful-termite.ngrok-free.app",
+  "tests": [
+    {
+      "name": "step_1_set_user_name",
+      "description": "Save user name to secondbrain.json",
+      "step": "step_1",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "add_json_entry",
+        "params": {
+          "filename": "secondbrain.json",
+          "entry_key": "user_profile",
+          "entry_data": {
+            "full_name": "Test User"
+          }
+        }
+      },
+      "expected_status": "success",
+      "validates": "User profile creation in secondbrain.json",
+      "critical": true
+    },
+    {
+      "name": "step_2_create_project_file",
+      "description": "Create project workspace JSON file",
+      "step": "step_2",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "create_json_file",
+        "params": {
+          "filename": "product-launch.json"
+        }
+      },
+      "expected_status": "success",
+      "validates": "Project file creation",
+      "critical": true
+    },
+    {
+      "name": "step_2b_populate_project_tasks",
+      "description": "Add project info and tasks to workspace",
+      "step": "step_2b",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "batch_add_json_entries",
+        "params": {
+          "filename": "product-launch.json",
+          "entries": [
+            {
+              "entry_key": "project_info",
+              "name": "Product Launch",
+              "created": "2025-11-16T10:00:00",
+              "status": "active"
+            },
+            {
+              "entry_key": "task_1",
+              "title": "Define objectives",
+              "status": "pending",
+              "priority": "high"
+            },
+            {
+              "entry_key": "task_2",
+              "title": "Identify stakeholders",
+              "status": "pending",
+              "priority": "medium"
+            },
+            {
+              "entry_key": "task_3",
+              "title": "Set timeline and milestones",
+              "status": "pending",
+              "priority": "medium"
+            },
+            {
+              "entry_key": "task_4",
+              "title": "Gather resources",
+              "status": "pending",
+              "priority": "low"
+            }
+          ]
+        }
+      },
+      "expected_status": "success",
+      "validates": "Batch task creation in project workspace",
+      "critical": true
+    },
+    {
+      "name": "step_4_find_dropzone_file",
+      "description": "Scan dropzone for files",
+      "step": "step_4",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "file_ops_tool",
+        "action": "find_file",
+        "params": {
+          "filename_fragment": "mike_maples.txt"
+        }
+      },
+      "validates": "Dropzone file detection",
+      "critical": false
+    },
+    {
+      "name": "step_4b_read_dropzone_file",
+      "description": "Read content from dropzone file",
+      "step": "step_4b",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "file_ops_tool",
+        "action": "read_file",
+        "params": {
+          "filename_fragment": "mike_maples.txt"
+        }
+      },
+      "validates": "Dropzone file content extraction",
+      "critical": false
+    },
+    {
+      "name": "step_5_capture_insight",
+      "description": "Save user insight to secondbrain.json",
+      "step": "step_5",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "add_json_entry",
+        "params": {
+          "filename": "secondbrain.json",
+          "entry_key": "insight_1731758400",
+          "entry_data": {
+            "content": "OrchestrateOS makes automation feel natural instead of technical",
+            "tags": ["insight", "onboarding"],
+            "created": "2025-11-16T10:00:00"
+          }
+        }
+      },
+      "expected_status": "success",
+      "validates": "Insight capture to knowledge base",
+      "critical": true
+    },
+    {
+      "name": "step_7_check_credits",
+      "description": "Check user credit balance",
+      "step": "step_7",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "check_credits",
+        "action": "check_credits",
+        "params": {}
+      },
+      "expected_status": "success",
+      "validates": "Credit balance retrieval",
+      "critical": true
+    },
+    {
+      "name": "step_8_unlock_outline_editor",
+      "description": "Unlock outline_editor tool (GPT flow test)",
+      "step": "step_8",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "unlock_tool",
+        "action": "unlock_tool",
+        "params": {
+          "tool_name": "outline_editor"
+        }
+      },
+      "expected_status": "already_unlocked",
+      "validates": "Outline Editor unlock mechanism (requires GPT in production)",
+      "critical": false
+    },
+    {
+      "name": "step_8_set_outline_credentials",
+      "description": "Set Outline API credentials (GPT flow test)",
+      "step": "step_8",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "system_settings",
+        "action": "set_credential",
+        "params": {
+          "script_path": "tools/outline_editor.py",
+          "value": "test_outline_api_key_placeholder"
+        }
+      },
+      "expected_status": "success",
+      "validates": "Outline credential storage (GPT sets real key in production)",
+      "critical": false
+    },
+    {
+      "name": "outro_list_secondbrain",
+      "description": "List all entries in secondbrain.json",
+      "step": "outro",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "list_json_entries",
+        "params": {
+          "filename": "secondbrain.json"
+        }
+      },
+      "expected_status": "success",
+      "validates": "Knowledge base listing",
+      "critical": false
+    },
+    {
+      "name": "verify_project_workspace",
+      "description": "Verify project workspace was created correctly",
+      "step": "verification",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "read_json_file",
+        "params": {
+          "filename": "product-launch.json"
+        }
+      },
+      "expected_status": "success",
+      "expected_contains": "Define objectives",
+      "validates": "Complete project workspace structure",
+      "critical": true
+    },
+    {
+      "name": "verify_user_profile",
+      "description": "Verify user profile was saved",
+      "step": "verification",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "read_json_entry",
+        "params": {
+          "filename": "secondbrain.json",
+          "entry_key": "user_profile"
+        }
+      },
+      "expected_status": "success",
+      "expected_contains": "Test User",
+      "validates": "User profile retrieval",
+      "critical": true
+    }
+  ],
+  "cleanup": [
+    {
+      "description": "Remove test project file",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "delete_json_file",
+        "params": {
+          "filename": "product-launch.json"
+        }
+      }
+    },
+    {
+      "description": "Remove test user profile",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "delete_json_entry",
+        "params": {
+          "filename": "secondbrain.json",
+          "entry_key": "user_profile"
+        }
+      }
+    },
+    {
+      "description": "Remove test insight",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "json_manager",
+        "action": "delete_json_entry",
+        "params": {
+          "filename": "secondbrain.json",
+          "entry_key": "insight_1731758400"
+        }
+      }
+    }
+  ]
+}
