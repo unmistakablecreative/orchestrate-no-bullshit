@@ -1,0 +1,20 @@
+{
+  "dashboard_items": [
+    {
+      "key": "toolkit",
+      "source": "file",
+      "file": "system_settings.ndjson",
+      "formatter": "toolkit_list",
+      "display_type": "table",
+      "limit": 50
+    },
+    {
+      "key": "app_store",
+      "source": "file",
+      "file": "data/orchestrate_app_store.json",
+      "formatter": "app_store_list",
+      "display_type": "list",
+      "limit": 10
+    }
+  ]
+}

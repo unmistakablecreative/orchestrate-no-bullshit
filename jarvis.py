@@ -302,8 +302,12 @@ def format_dashboard_display(data, config):
 
         raw_data = data[key]
 
-        # Apply formatter (no intent routes in beta)
-        if formatter == "calendar_list":
+        # Apply formatter (beta formatters: toolkit + app store)
+        if formatter == "toolkit_list":
+            formatted[key] = format_toolkit_list(raw_data, item.get("limit", 50))
+        elif formatter == "app_store_list":
+            formatted[key] = format_app_store_list(raw_data, item.get("limit", 10))
+        elif formatter == "calendar_list":
             formatted[key] = format_calendar_events(raw_data)
         elif formatter == "thread_log_list":
             formatted[key] = format_thread_log(raw_data, item.get("limit", 5))
@@ -315,7 +319,76 @@ def format_dashboard_display(data, config):
 
     return formatted
 
-# Dashboard formatters (no intent routes for beta)
+# Dashboard formatters (beta formatters)
+def format_toolkit_list(data, limit=50):
+    """Format system_settings.ndjson as toolkit display"""
+    if not data:
+        return "🔧 **Your Toolkit:** No tools available"
+
+    # Parse NDJSON - data could be list of objects or raw string
+    if isinstance(data, str):
+        entries = [json.loads(line.strip()) for line in data.split('\n') if line.strip()]
+    elif isinstance(data, list):
+        entries = data
+    else:
+        return "🔧 **Your Toolkit:** Error loading toolkit"
+
+    # Filter for actual tools (action: __tool__)
+    tools = [e for e in entries if e.get("action") == "__tool__"]
+
+    if not tools:
+        return "🔧 **Your Toolkit:** No tools available"
+
+    toolkit_output = "🔧 **Your Toolkit:**\n\n"
+
+    unlocked = [t for t in tools if not t.get("locked", True)]
+    locked = [t for t in tools if t.get("locked", True)]
+
+    if unlocked:
+        toolkit_output += "**✅ Unlocked Tools:**\n"
+        for tool in unlocked[:limit]:
+            name = tool.get("tool", "Unknown")
+            desc = tool.get("description", "")
+            toolkit_output += f"• **{name}**"
+            if desc:
+                toolkit_output += f" - {desc[:80]}"
+            toolkit_output += "\n"
+        toolkit_output += "\n"
+
+    if locked:
+        toolkit_output += "**🔒 Locked Tools:**\n"
+        for tool in locked[:limit]:
+            name = tool.get("tool", "Unknown")
+            cost = tool.get("referral_unlock_cost", "?")
+            toolkit_output += f"• **{name}** (Unlock: {cost} credits)\n"
+
+    return toolkit_output
+
+def format_app_store_list(data, limit=10):
+    """Format orchestrate_app_store.json as browsable list"""
+    if not isinstance(data, dict):
+        return "🏪 **App Store:** Error loading app store"
+
+    entries = data.get("entries", {})
+    if not entries:
+        return "🏪 **App Store:** No tools available"
+
+    store_output = "🏪 **App Store - Unlock New Tools:**\n\n"
+
+    # Sort by priority
+    sorted_tools = sorted(entries.items(), key=lambda x: x[1].get("priority", 999))
+
+    for tool_name, meta in sorted_tools[:limit]:
+        label = meta.get("label", tool_name)
+        desc = meta.get("description", "")[:120]
+        cost = meta.get("referral_unlock_cost", "?")
+
+        store_output += f"**{label}** ({cost} credits)\n"
+        store_output += f"  {desc}\n\n"
+
+    return store_output
+
+# Dashboard formatters (jarvis-local only, not used in beta)
 def format_calendar_events(data):
     """Format calendar events as list with participants"""
     events = []
