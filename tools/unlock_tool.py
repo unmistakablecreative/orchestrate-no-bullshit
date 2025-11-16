@@ -210,6 +210,14 @@ def find_tool_location(tool_name):
 
 def unlock_preinstalled_tool(tool_name, cost):
     """Unlock a pre-installed tool (mark as unlocked in registry)"""
+    # Load unlock messages
+    unlock_messages_path = os.path.join(RUNTIME_DIR, "data", "unlock_messages.json")
+    try:
+        with open(unlock_messages_path, "r") as f:
+            unlock_messages = json.load(f)
+    except FileNotFoundError:
+        unlock_messages = {}
+
     # Sync from JSONBin first
     sync_from_jsonbin()
 
@@ -230,9 +238,12 @@ def unlock_preinstalled_tool(tool_name, cost):
                 "auth_instructions": "🔐 AUTHENTICATION REQUIRED:\n\nRun this command in the container to authenticate:\n\n/home/orchestrate/.local/bin/claude auth login\n\nThis will provide a URL to complete OAuth authentication.\nAfter authentication, Claude Code can execute autonomous tasks."
             }
 
+        # Return message from unlock_messages.json if available
+        tool_message = unlock_messages.get(tool_name, {})
+        message = tool_message.get("message", f"✅ {tool_name} is already unlocked")
         return {
             "status": "already_unlocked",
-            "message": f"✅ {tool_name} is already unlocked"
+            "message": message
         }
 
     # Check credits
@@ -269,12 +280,19 @@ def unlock_preinstalled_tool(tool_name, cost):
 
     save_registry(registry)
 
+    # Get unlock message from unlock_messages.json
+    tool_message = unlock_messages.get(tool_name, {})
+    if tool_message:
+        message = tool_message.get("message", f"✅ {tool_name} unlocked! {ledger['referral_credits']} credits remaining.")
+    else:
+        message = f"✅ {tool_name} unlocked! {ledger['referral_credits']} credits remaining."
+
     return {
         "status": "success",
         "tool": tool_name,
         "type": "preinstalled",
         "credits_remaining": ledger["referral_credits"],
-        "message": f"✅ {tool_name} unlocked! {ledger['referral_credits']} credits remaining."
+        "message": message
     }
 
 

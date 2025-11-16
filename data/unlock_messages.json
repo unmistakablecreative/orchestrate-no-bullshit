@@ -1,0 +1,47 @@
+{
+  "outline_editor": {
+    "message": "✅ Outline Editor unlocked!\n\n📝 **Setup Required:**\n1. Get your Outline API key from https://app.getoutline.com/settings/tokens\n2. Tell the GPT: 'Set my Outline API key to [your_key]'\n3. The GPT will save it and you're ready to use Outline Editor",
+    "requires_credentials": true,
+    "credential_key": "outline_api_key"
+  },
+  "mem_tool": {
+    "message": "✅ Mem Tool unlocked!\n\n📝 **Setup Required:**\n1. Get your Mem API key from https://mem.ai/settings/api\n2. Tell the GPT: 'Set my Mem API key to [your_key]'\n3. The GPT will save it and you're ready to use Mem",
+    "requires_credentials": true,
+    "credential_key": "mem_api_key"
+  },
+  "readwise_tool": {
+    "message": "✅ Readwise Tool unlocked!\n\n📝 **Setup Required:**\n1. Get your Readwise API token from https://readwise.io/access_token\n2. Tell the GPT: 'Set my Readwise API key to [your_token]'\n3. The GPT will save it and you're ready to use Readwise",
+    "requires_credentials": true,
+    "credential_key": "readwise_api_key"
+  },
+  "github_tool_universal": {
+    "message": "✅ GitHub Tool unlocked!\n\n📝 **Setup Required:**\n1. Create a GitHub Personal Access Token at https://github.com/settings/tokens\n   - Scopes needed: repo, read:user, gist\n2. Tell the GPT: 'Set my GitHub token to [your_token]'\n3. The GPT will save it and you're ready to use GitHub integration",
+    "requires_credentials": true,
+    "credential_key": "github_token"
+  },
+  "buffer_engine": {
+    "message": "✅ Buffer Engine unlocked!\n\n📝 **Setup Required:**\n1. Get your Buffer API access token from https://publish.buffer.com/profile/apps\n2. Tell the GPT: 'Set my Buffer API key to [your_token]'\n3. The GPT will save it and you're ready to schedule posts",
+    "requires_credentials": true,
+    "credential_key": "buffer_access_token"
+  },
+  "json_manager": {
+    "message": "✅ JSON Manager unlocked! No setup required - ready to use.",
+    "requires_credentials": false
+  },
+  "file_ops_tool": {
+    "message": "✅ File Operations unlocked! No setup required - ready to use.",
+    "requires_credentials": false
+  },
+  "check_credits": {
+    "message": "✅ Credit Checker unlocked! No setup required - ready to use.",
+    "requires_credentials": false
+  },
+  "ideogram_tool": {
+    "message": "✅ Ideogram Tool unlocked! No setup required - ready to use.",
+    "requires_credentials": false
+  },
+  "convertkit_tool": {
+    "message": "✅ ConvertKit Tool unlocked! No setup required - ready to use.",
+    "requires_credentials": false
+  }
+}
