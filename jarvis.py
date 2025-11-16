@@ -262,9 +262,16 @@ def load_dashboard_data():
                 if source_type == "file":
                     # Load from file
                     filepath = os.path.join(BASE_DIR, item.get("file"))
-                    with open(filepath, 'r', encoding='utf-8') as f:
-                        data = json.load(f)
-                        dashboard_data[key] = data
+
+                    # Handle NDJSON files (system_settings.ndjson)
+                    if filepath.endswith('.ndjson'):
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = [json.loads(line.strip()) for line in f if line.strip()]
+                            dashboard_data[key] = data
+                    else:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            dashboard_data[key] = data
 
                 elif source_type == "tool_action":
                     # Load from tool execution
