@@ -241,6 +241,208 @@ def load_memory():
             "details": str(e)
         })
 
+# === Dashboard Rendering ===
+DASHBOARD_INDEX_PATH = os.path.join(BASE_DIR, "data/dashboard_index.json")
+
+def load_dashboard_data():
+    """Load dashboard using config-driven approach"""
+    try:
+        # Load dashboard configuration
+        with open(DASHBOARD_INDEX_PATH, 'r', encoding='utf-8') as f:
+            dashboard_config = json.load(f)
+
+        dashboard_data = {}
+
+        # Process each dashboard item
+        for item in dashboard_config.get("dashboard_items", []):
+            key = item.get("key")
+            source_type = item.get("source")
+
+            try:
+                if source_type == "file":
+                    # Load from file
+                    filepath = os.path.join(BASE_DIR, item.get("file"))
+                    with open(filepath, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        dashboard_data[key] = data
+
+                elif source_type == "tool_action":
+                    # Load from tool execution
+                    tool_name = item.get("tool")
+                    action = item.get("action")
+                    params = item.get("params", {})
+                    result = run_script(tool_name, action, params)
+                    dashboard_data[key] = result
+
+            except Exception as e:
+                dashboard_data[key] = {"error": f"Could not load {key}: {str(e)}"}
+
+        # Format the data for display using config
+        formatted_output = format_dashboard_display(dashboard_data, dashboard_config)
+
+        return {
+            "status": "success",
+            "dashboard_data": formatted_output
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to load dashboard: {str(e)}"}
+
+def format_dashboard_display(data, config):
+    """Convert JSON data to formatted output based on config"""
+    formatted = {}
+
+    for item in config.get("dashboard_items", []):
+        key = item.get("key")
+        formatter = item.get("formatter")
+        display_type = item.get("display_type")
+
+        if key not in data:
+            continue
+
+        raw_data = data[key]
+
+        # Apply formatter (no intent routes in beta)
+        if formatter == "calendar_list":
+            formatted[key] = format_calendar_events(raw_data)
+        elif formatter == "thread_log_list":
+            formatted[key] = format_thread_log(raw_data, item.get("limit", 5))
+        elif formatter == "ideas_list":
+            formatted[key] = format_ideas_reminders(raw_data, item.get("limit", 10))
+        else:
+            # Default: just pass through
+            formatted[key] = raw_data
+
+    return formatted
+
+# Dashboard formatters (no intent routes for beta)
+def format_calendar_events(data):
+    """Format calendar events as list with participants"""
+    events = []
+
+    if isinstance(data, dict):
+        if "events" in data:
+            events = data["events"]
+        elif "data" in data:
+            events = data["data"]
+    elif isinstance(data, list):
+        events = data
+
+    if events:
+        cal_list = "📅 **Calendar Events:**\n\n"
+        for event in events[:5]:
+            title = event.get("title", "No title")
+            when = event.get("when", {})
+            start_time = when.get("start_time", when.get("start", ""))
+            if isinstance(start_time, (int, float)):
+                start_time = datetime.fromtimestamp(start_time).strftime("%m/%d %H:%M")
+
+            # Extract participants and show who the meeting is with (excluding user)
+            participants = event.get("participants", [])
+            user_email = "srinirao"  # Current user's email
+
+            # Filter out the user's own email from participants
+            other_participants = [
+                p for p in participants
+                if p.get("email") != user_email
+            ]
+
+            # Build list of participant names to display
+            participant_names = []
+            for p in other_participants:
+                # Prefer name over email for display
+                name = p.get("name") or p.get("email", "")
+                if name:
+                    participant_names.append(name)
+
+            # Format the event line with participants if any
+            if participant_names:
+                participants_str = " + ".join(participant_names)
+                cal_list += f"• **{start_time}**: {title} (with {participants_str})\n"
+            else:
+                cal_list += f"• **{start_time}**: {title}\n"
+
+        return cal_list
+    else:
+        return "📅 **Calendar Events:** No upcoming events"
+
+def format_thread_log(data, limit=5):
+    """Format thread log as list"""
+    if not isinstance(data, dict):
+        return "📋 **Thread Log:** No entries"
+
+    entries_data = data.get("entries", data)
+    if entries_data:
+        thread_list = "📋 **Thread Log:**\n\n"
+        for key, entry in list(entries_data.items())[-limit:]:
+            status = entry.get("status", "unknown").upper()
+            goal = entry.get("context_goal", key)[:60]
+            thread_list += f"• **{status}**: {goal}\n"
+        return thread_list
+    else:
+        return "📋 **Thread Log:** No entries"
+
+def format_ideas_reminders(data, limit=10):
+    """Format ideas and reminders as list"""
+    if not isinstance(data, dict):
+        return "💡 **Ideas & Reminders:** No entries"
+
+    entries_data = data.get("entries", data)
+    if entries_data:
+        ideas_list = "💡 **Ideas & Reminders:**\n\n"
+        for key, item in list(entries_data.items())[-limit:]:
+            if isinstance(item, dict):
+                item_type = item.get("type", "idea")
+                title = item.get("title", item.get("content", key))[:60]
+                ideas_list += f"• **{item_type.title()}**: {title}\n"
+            else:
+                ideas_list += f"• **Idea**: {str(item)[:60]}\n"
+        return ideas_list
+    else:
+        return "💡 **Ideas & Reminders:** No entries"
+
+# Dashboard endpoint
+@app.get("/get_dashboard_file/{file_key}")
+def get_dashboard_file(file_key: str):
+    """Load specific dashboard files when needed or full dashboard"""
+
+    # Special case: full dashboard
+    if file_key == "full_dashboard":
+        dashboard = load_dashboard_data()
+        return dashboard
+
+    # Individual files
+    file_map = {
+        "phrase_promotions": "data/phrase_insight_promotions.json",
+        "runtime_contract": "orchestrate_runtime_contract.json",
+        "tool_build_protocol": "data/tool_build_protocol.json",
+        "podcast_prep_rules": "podcast_prep_guidelines.json",
+        "thread_log_full": "data/thread_log.json",
+        "ideas_and_reminders_full": "data/ideas_reminders.json"
+    }
+
+    if file_key not in file_map:
+        raise HTTPException(status_code=404, detail=f"File key '{file_key}' not found")
+
+    try:
+        filepath = file_map[file_key]
+        abs_path = os.path.join(BASE_DIR, filepath)
+
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        return {
+            "status": "success",
+            "file_key": file_key,
+            "data": data
+        }
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={
+            "error": f"Could not load {file_key}",
+            "details": str(e)
+        })
+
 # === Health Check ===
 @app.get("/")
 def root():

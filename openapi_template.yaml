@@ -123,6 +123,51 @@ paths:
         '500':
           description: Failed to parse or save message
 
+  /get_dashboard_file/{file_key}:
+    get:
+      operationId: getDashboardFile
+      summary: Get pre-formatted dashboard data
+      description: Returns server-side rendered dashboard data or specific dashboard files. Use 'full_dashboard' for complete dashboard with all sections pre-formatted.
+      parameters:
+        - name: file_key
+          in: path
+          required: true
+          schema:
+            type: string
+            enum:
+              - full_dashboard
+              - phrase_promotions
+              - runtime_contract
+              - tool_build_protocol
+              - podcast_prep_rules
+              - thread_log_full
+              - ideas_and_reminders_full
+          description: Key identifying which dashboard file or section to retrieve
+      responses:
+        '200':
+          description: Dashboard data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  dashboard_data:
+                    type: object
+                    description: Pre-formatted dashboard sections (when file_key is 'full_dashboard')
+                  file_key:
+                    type: string
+                    description: The requested file key (for individual files)
+                  data:
+                    type: object
+                    description: Raw file data (for individual files)
+        '404':
+          description: File key not found
+        '500':
+          description: Failed to load dashboard or file
+
   /:
     get:
       operationId: healthCheck
