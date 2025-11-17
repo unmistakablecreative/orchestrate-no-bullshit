@@ -26,24 +26,17 @@ RUN pip install --no-cache-dir \
 # Create orchestrate user (UID 1000) with home directory
 RUN useradd -u 1000 -m -s /bin/bash orchestrate
 
-# Create working dir
-RUN mkdir -p /opt/orchestrate-core-runtime
+# Create working dir owned by orchestrate user
+RUN mkdir -p /opt/orchestrate-core-runtime && \
+    chown -R orchestrate:orchestrate /opt/orchestrate-core-runtime
 WORKDIR /opt/orchestrate-core-runtime
-
-# Copy all files from repo into container
-COPY . /opt/orchestrate-core-runtime/
-
-# Set ownership to orchestrate user
-RUN chown -R orchestrate:orchestrate /opt/orchestrate-core-runtime
 
 # Switch to non-root user
 USER orchestrate
 
-# Install Claude Code CLI as non-root user
-RUN curl -fsSL https://claude.ai/install.sh | bash
-
-# Apply Orchestrate Claude Code configuration
-RUN bash /opt/orchestrate-core-runtime/apply_claude_facelift.sh
+# Claude Code installation moved to runtime (via unlock flow) to avoid build-time segfaults
+# RUN curl -fsSL https://claude.ai/install.sh | bash
+# RUN bash /opt/orchestrate-core-runtime/apply_claude_facelift.sh
 
 # Entry handled externally
 ENTRYPOINT ["/bin/bash", "/opt/orchestrate-core-runtime/entrypoint.sh"]

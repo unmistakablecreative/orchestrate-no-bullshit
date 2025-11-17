@@ -241,6 +241,286 @@ def load_memory():
             "details": str(e)
         })
 
+# === Dashboard Rendering ===
+DASHBOARD_INDEX_PATH = os.path.join(BASE_DIR, "data/dashboard_index.json")
+
+def load_dashboard_data():
+    """Load dashboard using config-driven approach"""
+    try:
+        # Load dashboard configuration
+        with open(DASHBOARD_INDEX_PATH, 'r', encoding='utf-8') as f:
+            dashboard_config = json.load(f)
+
+        dashboard_data = {}
+
+        # Process each dashboard item
+        for item in dashboard_config.get("dashboard_items", []):
+            key = item.get("key")
+            source_type = item.get("source")
+
+            try:
+                if source_type == "file":
+                    # Load from file
+                    filepath = os.path.join(BASE_DIR, item.get("file"))
+
+                    # Handle NDJSON files (system_settings.ndjson)
+                    if filepath.endswith('.ndjson'):
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = [json.loads(line.strip()) for line in f if line.strip()]
+                            dashboard_data[key] = data
+                    else:
+                        with open(filepath, 'r', encoding='utf-8') as f:
+                            data = json.load(f)
+                            dashboard_data[key] = data
+
+                elif source_type == "tool_action":
+                    # Load from tool execution
+                    tool_name = item.get("tool")
+                    action = item.get("action")
+                    params = item.get("params", {})
+                    result = run_script(tool_name, action, params)
+                    dashboard_data[key] = result
+
+            except Exception as e:
+                dashboard_data[key] = {"error": f"Could not load {key}: {str(e)}"}
+
+        # Format the data for display using config
+        formatted_output = format_dashboard_display(dashboard_data, dashboard_config)
+
+        return {
+            "status": "success",
+            "dashboard_data": formatted_output
+        }
+
+    except Exception as e:
+        return {"error": f"Failed to load dashboard: {str(e)}"}
+
+def format_dashboard_display(data, config):
+    """Convert JSON data to formatted output based on config"""
+    formatted = {}
+
+    for item in config.get("dashboard_items", []):
+        key = item.get("key")
+        formatter = item.get("formatter")
+        display_type = item.get("display_type")
+
+        if key not in data:
+            continue
+
+        raw_data = data[key]
+
+        # Apply formatter (beta formatters: toolkit + app store)
+        if formatter == "toolkit_list":
+            formatted[key] = format_toolkit_list(raw_data, item.get("limit", 50))
+        elif formatter == "app_store_list":
+            formatted[key] = format_app_store_list(raw_data, item.get("limit", 10))
+        elif formatter == "calendar_list":
+            formatted[key] = format_calendar_events(raw_data)
+        elif formatter == "thread_log_list":
+            formatted[key] = format_thread_log(raw_data, item.get("limit", 5))
+        elif formatter == "ideas_list":
+            formatted[key] = format_ideas_reminders(raw_data, item.get("limit", 10))
+        else:
+            # Default: just pass through
+            formatted[key] = raw_data
+
+    return formatted
+
+# Dashboard formatters (beta formatters)
+def format_toolkit_list(data, limit=50):
+    """Format system_settings.ndjson as markdown table"""
+    if not data:
+        return {"display_table": "No tools available", "tools": []}
+
+    # Parse NDJSON - data could be list of objects or raw string
+    if isinstance(data, str):
+        entries = [json.loads(line.strip()) for line in data.split('\n') if line.strip()]
+    elif isinstance(data, list):
+        entries = data
+    else:
+        return {"display_table": "Error loading toolkit", "tools": []}
+
+    # Filter for actual tools (action: __tool__)
+    tools = [e for e in entries if e.get("action") == "__tool__"]
+
+    if not tools:
+        return {"display_table": "No tools available", "tools": []}
+
+    # Sort: unlocked alphabetically, locked by cost
+    unlocked = sorted([t for t in tools if not t.get("locked", True)],
+                     key=lambda x: x.get("tool", "").lower())
+    locked = sorted([t for t in tools if t.get("locked", True)],
+                   key=lambda x: x.get("referral_unlock_cost", 999))
+
+    # Build markdown table
+    table = "| Status | Tool | Description | Unlock Cost |\n"
+    table += "|--------|------|-------------|-------------|\n"
+
+    for tool in unlocked[:limit]:
+        name = tool.get("tool", "Unknown")
+        desc = tool.get("description", "")[:60]
+        table += f"| ✅ | **{name}** | {desc} | - |\n"
+
+    for tool in locked[:limit]:
+        name = tool.get("tool", "Unknown")
+        desc = tool.get("description", "")[:60]
+        cost = tool.get("referral_unlock_cost", "?")
+        table += f"| 🔒 | {name} | {desc} | {cost} credits |\n"
+
+    return {"display_table": table, "tools": tools}
+
+def format_app_store_list(data, limit=10):
+    """Format orchestrate_app_store.json as markdown table"""
+    if not isinstance(data, dict):
+        return {"display_table": "Error loading app store", "tools": {}}
+
+    entries = data.get("entries", {})
+    if not entries:
+        return {"display_table": "No tools available", "tools": {}}
+
+    # Sort by priority
+    sorted_tools = sorted(entries.items(), key=lambda x: x[1].get("priority", 999))
+
+    # Build markdown table
+    table = "| Tool | Cost | Description |\n"
+    table += "|------|------|-------------|\n"
+
+    for tool_name, meta in sorted_tools[:limit]:
+        label = meta.get("label", tool_name)
+        desc = meta.get("description", "")[:80]
+        cost = meta.get("referral_unlock_cost", "?")
+        table += f"| **{label}** | {cost} credits | {desc} |\n"
+
+    return {"display_table": table, "tools": entries}
+
+# Dashboard formatters (jarvis-local only, not used in beta)
+def format_calendar_events(data):
+    """Format calendar events as list with participants"""
+    events = []
+
+    if isinstance(data, dict):
+        if "events" in data:
+            events = data["events"]
+        elif "data" in data:
+            events = data["data"]
+    elif isinstance(data, list):
+        events = data
+
+    if events:
+        cal_list = "📅 **Calendar Events:**\n\n"
+        for event in events[:5]:
+            title = event.get("title", "No title")
+            when = event.get("when", {})
+            start_time = when.get("start_time", when.get("start", ""))
+            if isinstance(start_time, (int, float)):
+                start_time = datetime.fromtimestamp(start_time).strftime("%m/%d %H:%M")
+
+            # Extract participants and show who the meeting is with (excluding user)
+            participants = event.get("participants", [])
+            user_email = "srinirao"  # Current user's email
+
+            # Filter out the user's own email from participants
+            other_participants = [
+                p for p in participants
+                if p.get("email") != user_email
+            ]
+
+            # Build list of participant names to display
+            participant_names = []
+            for p in other_participants:
+                # Prefer name over email for display
+                name = p.get("name") or p.get("email", "")
+                if name:
+                    participant_names.append(name)
+
+            # Format the event line with participants if any
+            if participant_names:
+                participants_str = " + ".join(participant_names)
+                cal_list += f"• **{start_time}**: {title} (with {participants_str})\n"
+            else:
+                cal_list += f"• **{start_time}**: {title}\n"
+
+        return cal_list
+    else:
+        return "📅 **Calendar Events:** No upcoming events"
+
+def format_thread_log(data, limit=5):
+    """Format thread log as list"""
+    if not isinstance(data, dict):
+        return "📋 **Thread Log:** No entries"
+
+    entries_data = data.get("entries", data)
+    if entries_data:
+        thread_list = "📋 **Thread Log:**\n\n"
+        for key, entry in list(entries_data.items())[-limit:]:
+            status = entry.get("status", "unknown").upper()
+            goal = entry.get("context_goal", key)[:60]
+            thread_list += f"• **{status}**: {goal}\n"
+        return thread_list
+    else:
+        return "📋 **Thread Log:** No entries"
+
+def format_ideas_reminders(data, limit=10):
+    """Format ideas and reminders as list"""
+    if not isinstance(data, dict):
+        return "💡 **Ideas & Reminders:** No entries"
+
+    entries_data = data.get("entries", data)
+    if entries_data:
+        ideas_list = "💡 **Ideas & Reminders:**\n\n"
+        for key, item in list(entries_data.items())[-limit:]:
+            if isinstance(item, dict):
+                item_type = item.get("type", "idea")
+                title = item.get("title", item.get("content", key))[:60]
+                ideas_list += f"• **{item_type.title()}**: {title}\n"
+            else:
+                ideas_list += f"• **Idea**: {str(item)[:60]}\n"
+        return ideas_list
+    else:
+        return "💡 **Ideas & Reminders:** No entries"
+
+# Dashboard endpoint
+@app.get("/get_dashboard_file/{file_key}")
+def get_dashboard_file(file_key: str):
+    """Load specific dashboard files when needed or full dashboard"""
+
+    # Special case: full dashboard
+    if file_key == "full_dashboard":
+        dashboard = load_dashboard_data()
+        return dashboard
+
+    # Individual files
+    file_map = {
+        "phrase_promotions": "data/phrase_insight_promotions.json",
+        "runtime_contract": "orchestrate_runtime_contract.json",
+        "tool_build_protocol": "data/tool_build_protocol.json",
+        "podcast_prep_rules": "podcast_prep_guidelines.json",
+        "thread_log_full": "data/thread_log.json",
+        "ideas_and_reminders_full": "data/ideas_reminders.json"
+    }
+
+    if file_key not in file_map:
+        raise HTTPException(status_code=404, detail=f"File key '{file_key}' not found")
+
+    try:
+        filepath = file_map[file_key]
+        abs_path = os.path.join(BASE_DIR, filepath)
+
+        with open(abs_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        return {
+            "status": "success",
+            "file_key": file_key,
+            "data": data
+        }
+
+    except Exception as e:
+        return JSONResponse(status_code=500, content={
+            "error": f"Could not load {file_key}",
+            "details": str(e)
+        })
+
 # === Health Check ===
 @app.get("/")
 def root():
