@@ -9,25 +9,15 @@
       "note": "Step-by-step onboarding. Do not render all steps. Follow 'next' chaining only."
     },
     "intro": {
-      "title": "👋 Welcome to Orchestrate",
-      "narration": "You’re now inside Orchestrate — your command center for tasks, notes, and file tools. Let’s walk through how it works.",
+      "title": "👋 Welcome to OrchestrateOS",
+      "narration": "Let me show you what this can do in about 2 minutes.",
       "next": "step_1"
     },
     "steps": {
       "step_1": {
-        "title": "📂 Load Your Workspace",
-        "narration": "We’ll start by loading your workspace — tasks and saved items.",
-        "action": {
-          "tool": "json_manager",
-          "action": "read_json_file",
-          "params": { "filename": "secondbrain.json" }
-        },
-        "next": "step_1b"
-      },
-      "step_1b": {
-        "title": "🧑‍💼 Set Your Name",
-        "narration": "Let’s personalize things. What name should I use when referring to you?\n\nThis will also appear in invites when you refer others.",
-        "prompt": "Type your full name (e.g. Eva Sanchez):",
+        "title": "🧑‍💼 What's Your Name?",
+        "narration": "What should I call you?",
+        "prompt": "Type your name:",
         "action_template": {
           "tool": "json_manager",
           "action": "add_json_entry",
@@ -43,151 +33,139 @@
         "next": "step_2"
       },
       "step_2": {
-        "title": "✏️ Create Your First Task",
-        "narration": "What’s something you need to remember or take action on? Let’s save your first task.",
-        "prompt": "What task should I remember for you?",
+        "title": "🎯 What Are You Working On?",
+        "narration": "Give me a project. I'll build your workspace.",
+        "prompt": "What's the project? (e.g. Product Launch, Trip to Japan, Q4 Planning)",
+        "action_template": {
+          "tool": "json_manager",
+          "action": "create_json_file",
+          "params": {
+            "filename": "{{user_input | slug}}.json"
+          }
+        },
+        "requires_user_input": true,
+        "next": "step_2b"
+      },
+      "step_2b": {
+        "title": "📋 Building Your Project Structure",
+        "narration": "Creating tasks for {{previous_input}}...",
+        "action": {
+          "tool": "json_manager",
+          "action": "batch_add_entries",
+          "params": {
+            "filename": "{{previous_input | slug}}.json",
+            "entries": {
+              "project_info": {
+                "name": "{{previous_input}}",
+                "created": "{{timestamp}}",
+                "status": "active"
+              },
+              "task_1": {
+                "title": "Define objectives",
+                "status": "pending",
+                "priority": "high"
+              },
+              "task_2": {
+                "title": "Identify stakeholders",
+                "status": "pending",
+                "priority": "medium"
+              },
+              "task_3": {
+                "title": "Set timeline and milestones",
+                "status": "pending",
+                "priority": "medium"
+              },
+              "task_4": {
+                "title": "Gather resources",
+                "status": "pending",
+                "priority": "low"
+              }
+            }
+          }
+        },
+        "narration_after": "✅ Created {{previous_input}} workspace with 4 starter tasks:\n\n- Define objectives (high priority)\n- Identify stakeholders\n- Set timeline and milestones\n- Gather resources\n\nYou can add, update, or remove tasks anytime.",
+        "next": "step_3"
+      },
+      "step_3": {
+        "title": "📥 Drop a File",
+        "narration": "Got any files for this project? Drop them here:\n\n**~/Documents/Orchestrate/dropzone**\n\nI'll auto-parse PDFs, Word docs, CSVs, spreadsheets—whatever you have.",
+        "prompt": "Say 'ready' when you've dropped something, or 'skip' to continue.",
+        "requires_user_input": true,
+        "next": "step_4"
+      },
+      "step_4": {
+        "title": "🔍 Scanning Dropzone",
+        "narration": "Checking what you dropped in...",
+        "action": {
+          "tool": "file_ops_tool",
+          "action": "find_file",
+          "params": {
+            "filename_fragment": "*"
+          }
+        },
+        "skip_if": "{{user_input == 'skip'}}",
+        "next": "step_4b"
+      },
+      "step_4b": {
+        "title": "📄 Reading Your File",
+        "narration": "Extracting content...",
+        "action_template": {
+          "tool": "file_ops_tool",
+          "action": "read_file",
+          "params": {
+            "filename_fragment": "{{found_file}}"
+          }
+        },
+        "narration_after": "✅ File parsed. Content extracted and ready to use.",
+        "skip_if": "{{user_input == 'skip'}}",
+        "next": "step_5"
+      },
+      "step_5": {
+        "title": "💡 Capture an Insight",
+        "narration": "What's one thing you want to remember? Could be about your project, something you learned, anything.",
+        "prompt": "Type your insight:",
         "action_template": {
           "tool": "json_manager",
           "action": "add_json_entry",
           "params": {
             "filename": "secondbrain.json",
-            "entry_key": "user_task_1",
+            "entry_key": "insight_{{timestamp}}",
             "entry_data": {
-              "title": "{{user_input}}",
-              "status": "active"
+              "content": "{{user_input}}",
+              "tags": ["insight", "onboarding"],
+              "created": "{{timestamp}}"
             }
           }
         },
-        "requires_user_input": true,
-        "next": "step_3"
-      },
-      "step_3": {
-        "title": "📓 Open Your Notes",
-        "narration": "Your notes live here. I’ve already dropped in a few sample entries that explain how the notes system works — no setup required.",
-        "action": {
-          "tool": "json_manager",
-          "action": "read_json_file",
-          "params": { "filename": "notes.json" }
-        },
-        "next": "step_4"
-      },
-      "step_4": {
-        "title": "🧠 Save Your First Note",
-        "narration": "Let’s explore how notes work in Orchestrate. 🧠 Notes are your system-wide scratchpad — ideal for insights, ideas, or things you want to remember later.\n\nYou don’t need to organize them manually — I’ll help you retrieve or connect them using tags and search.",
-        "prompt": "Type any new idea you want to capture:",
-        "action_template": {
-          "tool": "json_manager",
-          "action": "add_json_entry",
-          "params": {
-            "filename": "notes.json",
-            "entry_key": "insight_1",
-            "entry_data": {
-              "title": "{{user_input}}",
-              "tags": ["insight"]
-            }
-          }
-        },
-        "requires_user_input": true,
-        "next": "step_5"
-      },
-      "step_5": {
-        "title": "📥 Drop a File Into the Drop Zone",
-        "narration": "Let’s explore the **Drop Zone** — one of the most powerful parts of Orchestrate.\n\nYou’ll find it here:\n**~/Documents/Orchestrate/dropzone**\n\nDrop in any file you want to work with, then let me know when you're ready.",
-        "prompt": "Say 'ready' once you’ve dropped something in — we’ll use it next.",
         "requires_user_input": true,
         "next": "step_6"
       },
       "step_6": {
-        "title": "🔍 Scan & Index the Drop Zone",
-        "narration": "Now let’s scan the Drop Zone and index what you’ve added.",
-        "action": {
-          "tool": "file_finder",
-          "action": "search_files",
-          "params": { "keyword": "*" }
-        },
+        "title": "✅ Workspace Live",
+        "narration": "Done. You now have:\n\n- **Project structure** with tasks\n- **File parsed** and indexed\n- **Insight saved** to your knowledge base\n\nAll coordinated. No copy/paste. No manual setup. That's OrchestrateOS.",
         "next": "step_7"
       },
       "step_7": {
-        "title": "📖 Smart File Handling",
-        "narration": "Pick a file to open — Orchestrate will route it to the right tool based on type.",
-        "action_template": {
-          "tool": "read_file",
-          "action": "read_file",
-          "params": {
-            "filename": "{{found_file}}"
-          }
+        "title": "🪙 Your Credits",
+        "narration": "Let's see what you have to work with.",
+        "action": {
+          "tool": "check_credits",
+          "action": "get_balance",
+          "params": {}
         },
         "next": "step_8"
       },
       "step_8": {
-        "title": "🧠 Save an Insight from the File",
-        "narration": "Want to capture something from that file? I’ll log it instantly.",
-        "prompt": "What insight do you want to save?",
-        "action_template": {
-          "tool": "json_manager",
-          "action": "add_json_entry",
-          "params": {
-            "filename": "notes.json",
-            "entry_key": "insight_from_file",
-            "entry_data": {
-              "title": "{{user_input}}",
-              "tags": ["insight"]
-            }
-          }
-        },
-        "requires_user_input": true,
-        "next": "step_9"
-      },
-      "step_9": {
-        "title": "🔮 Predict Your Future",
-        "narration": "Let’s play MASH — the legendary game that predicts your future. You choose the options, and I’ll spin the wheel.",
-        "prompt": "List 4 options for each: \n- Where you might live (e.g. Mansion, Apartment...)\n- What you might drive (e.g. Tesla, Bike...)\n- Dream jobs (e.g. Astronaut, DJ...)\n- Life partners (real or fictional)\n\nThen pick a number from 1–10 for the spin.",
-        "action_template": {
-          "tool": "mash_tool",
-          "action": "spin_game",
-          "params": {
-            "params": {
-              "home": "{{user_input.home}}",
-              "car": "{{user_input.car}}",
-              "career": "{{user_input.career}}",
-              "partner": "{{user_input.partner}}",
-              "spin": "{{user_input.spin}}"
-            }
-          }
-        },
-        "requires_user_input": true,
-        "next": "step_10"
-      },
-      "step_10": {
-        "title": "🎁 Refer a Friend — Add to the System",
-        "narration": "Want to refer someone? Just give me their name and email, and I’ll log it to `referrals.json` so they can be invited and both of you unlock tools.",
-        "prompt": "Enter the name and email of the person you'd like to refer (e.g. John Smith, john@example.com):",
-        "action_template": {
-          "tool": "json_manager",
-          "action": "add_json_entry",
-          "params": {
-            "filename": "referrals.json",
-            "entry_key": "{{user_input.name | slug}}",
-            "entry_data": {
-              "name": "{{user_input.name}}",
-              "email": "{{user_input.email}}"
-            }
-          }
-        },
-        "requires_user_input": true,
-        "next": "step_11"
-      },
-      "step_11": {
-        "title": "🪙 Unlock a New Tool",
-        "narration": "🎉 You’ve now completed your core setup.\n\n🟢 You’ve also been granted **3 unlock credits**.\n\nYou can use them to unlock tools like Outline Editor, Buffer Engine, Blog Assembler, and more — no referrals needed.",
-        "prompt": "Would you like to see what tools are available to unlock now?",
+        "title": "🔓 Unlock Outline Editor",
+        "narration": "You have 3 credits. Here's why Outline Editor is worth 2 of them:\n\n**The problem:** AI writes something good. You copy. You paste. You format. You save. Every. Single. Time.\n\n**With Outline Editor:** Say 'turn this into a document' and it's done. No copying. No pasting. It just appears in your workspace, structured and saved.\n\nYou can also:\n- Create docs from scratch: 'write me an outline about X'\n- Build collections of related documents\n- Edit sections without losing structure\n\n**The cost:** $10/month subscription at https://www.getoutline.com/ unlocks the API. But think about it—how many hours do you waste copy/pasting AI output? How much is that time worth? This pays for itself the first week.\n\nSay 'unlock outline editor' to activate it (uses 2 credits), or 'skip' for now.",
+        "prompt": "Unlock now or skip?",
         "requires_user_input": true,
         "next": "outro"
       }
     },
     "outro": {
-      "title": "✅ You’re Set Up",
-      "narration": "You’ve created a task, saved a note, added a file, captured insight, predicted your future, referred someone, and explored unlocks. Your Orchestrate workspace is now live.",
+      "title": "🚀 You're Set",
+      "narration": "Your workspace is live. Say 'show my workspace' to see everything, or tell me what you want to work on.",
       "action": {
         "tool": "json_manager",
         "action": "list_json_entries",
