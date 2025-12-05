@@ -1,0 +1,20 @@
+{
+  "test_suite": "orchestrate_docker_auth",
+  "ngrok_url": "https://supposedly-faithful-termite.ngrok-free.app",
+  "tests": [
+    {
+      "name": "unlock_claude_tool",
+      "endpoint": "/execute_task",
+      "payload": {
+        "tool_name": "claude_assistant",
+        "action": "unlock_tool",
+        "params": {
+          "user_id": "test_user",
+          "tool_name": "claude_assistant"
+        }
+      },
+      "expected_status": "success",
+      "description": "Triggers Claude Code auth flow by unlocking claude_assistant tool"
+    }
+  ]
+}

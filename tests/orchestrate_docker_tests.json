@@ -145,7 +145,7 @@
           "tool_name": "claude_assistant"
         }
       },
-      "expected_status": "success",
+      "expected_status": "already_unlocked",
       "critical": true
     },
     {
