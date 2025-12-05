@@ -6,6 +6,15 @@
           "tool": "${SAFE_DOMAIN}__jit_plugin",
           "action": "executeTask",
           "params": {
+            "tool_name": "system_settings",
+            "action": "refresh_runtime",
+            "params": {}
+          }
+        },
+        {
+          "tool": "${SAFE_DOMAIN}__jit_plugin",
+          "action": "executeTask",
+          "params": {
             "tool_name": "system_control",
             "action": "load_orchestrate_os",
             "params": {}
@@ -62,6 +71,26 @@
         "DISALLOW_ERROR_MESSAGES_WITHOUT_EXECUTION_TRACE": true,
         "ONLY_ALLOW_TOOL_ERRORS_IF_SOURCE_IS_EXECUTE_TASK": true,
         "STRICT_EXECUTION_CHAIN_ENFORCEMENT": true
+      }
+    },
+    "start onboarding": {
+      "run": [
+        {
+          "tool": "${SAFE_DOMAIN}__jit_plugin",
+          "action": "executeTask",
+          "params": {
+            "tool_name": "json_manager",
+            "action": "read_json_file",
+            "params": {
+              "filename": "onboarding_sequence.json"
+            }
+          }
+        }
+      ],
+      "post_process": "initiate_onboarding_flow",
+      "display": {
+        "style": "guided",
+        "render_mode": "step_based"
       }
     }
   }
