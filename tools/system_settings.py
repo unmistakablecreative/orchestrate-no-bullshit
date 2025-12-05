@@ -56,28 +56,39 @@ def set_credential(params):
     Set a credential for a tool by parsing the script to auto-detect required keys
 
     Required:
-    - script_path: path to tool script (e.g., "tools/outline_editor.py")
+    - tool_name: name of tool (e.g., "outline_editor")
     - value: credential value
 
     Example:
-    {"script_path": "tools/outline_editor.py", "value": "sk-outline-abc123"}
+    {"tool_name": "outline_editor", "value": "sk-outline-abc123"}
 
-    The function parses the script to find load_credential() calls and extracts
-    the actual key names, then saves the credential with those exact keys.
+    The function looks up the script_path from the registry, parses it to find
+    load_credential() calls, and extracts the actual key names.
     """
     import re
 
     value = params.get("value")
-    script_path = params.get("script_path")
+    tool_name = params.get("tool_name")
 
     if not value:
         return {"status": "error", "message": "❌ Missing 'value' in params"}
+    if not tool_name:
+        return {"status": "error", "message": "❌ Missing 'tool_name' in params"}
+
+    # Look up script_path from registry
+    registry = load_registry()
+    script_path = None
+    for entry in registry:
+        if entry.get("tool") == tool_name and entry.get("action") == "__tool__":
+            script_path = entry.get("script_path")
+            break
+
     if not script_path:
-        return {"status": "error", "message": "❌ Missing 'script_path' in params"}
+        return {"status": "error", "message": f"❌ Tool '{tool_name}' not found in registry"}
 
     # Handle both absolute and relative paths
     if not os.path.isabs(script_path):
-        script_path = os.path.join(os.getcwd(), script_path)
+        script_path = os.path.join(os.path.dirname(SYSTEM_REGISTRY), script_path)
 
     if not os.path.exists(script_path):
         return {"status": "error", "message": f"❌ Script not found: {script_path}"}
